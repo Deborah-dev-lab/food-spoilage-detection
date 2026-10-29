@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'theme/app_theme.dart';
+import 'screens/onboarding_screen.dart';
+
 void main() {
   runApp(const FreshTrackApp());
 }
+
+// ==========================================
+// FRESHTRACK APPLICATION
+// ==========================================
 
 class FreshTrackApp extends StatelessWidget {
   const FreshTrackApp({super.key});
@@ -12,170 +19,241 @@ class FreshTrackApp extends StatelessWidget {
     return MaterialApp(
       title: 'FreshTrack',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF8F9FC),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF003D2E)),
-      ),
+      theme: AppTheme.theme,
       home: const SplashScreen(),
     );
   }
 }
 
+// ==========================================
+// SPLASH / WELCOME SCREEN
+// ==========================================
+
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
-  static const Color darkGreen = Color(0xFF003D2E);
-  static const Color sageGreen = Color(0xFF9AB5A8);
-  static const Color background = Color(0xFFF8F9FC);
+  void openOnboarding(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
-
-      appBar: AppBar(
-        backgroundColor: background,
-        elevation: 0,
-        title: const Text(
-          'FreshTrack',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-            color: darkGreen,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              showAboutDialog(
-                context: context,
-                applicationName: 'FreshTrack',
-                applicationVersion: '1.0',
-                children: const [
-                  Text('Smartphone-Based Food Spoilage Detection System'),
-                ],
-              );
-            },
-          ),
-          const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: CircleAvatar(
-              radius: 17,
-              backgroundColor: darkGreen,
-              child: Icon(Icons.person_outline, color: Colors.white, size: 18),
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: AppTheme.ivory,
 
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const Spacer(flex: 2),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
 
-              Container(
-                width: 112,
-                height: 112,
-                decoration: BoxDecoration(
-                  color: darkGreen,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: sageGreen, width: 5),
-                ),
-                child: const Icon(
-                  Icons.eco_outlined,
-                  size: 54,
-                  color: sageGreen,
-                ),
-              ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(26, 20, 26, 28),
 
-              const SizedBox(height: 18),
-
-              const Text(
-                'FreshTrack',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF20252B),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                'Making Food Safety Smarter',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Color(0xFF667078)),
-              ),
-
-              const Spacer(flex: 2),
-
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Onboarding screen coming next!'),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: darkGreen,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Get Started',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                      // ----------------------------------
+                      // BRAND HEADER
+                      // ----------------------------------
+
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.spa_rounded,
+                            color: AppTheme.forest,
+                            size: 28,
+                          ),
+
+                          SizedBox(width: 8),
+
+                          Text(
+                            'freshtrack.',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.8,
+                              color: AppTheme.forest,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 46),
+
+                      // ----------------------------------
+                      // HERO ILLUSTRATION
+                      // ----------------------------------
+                      Container(
+                        height: 290,
+                        width: double.infinity,
+
+                        decoration: BoxDecoration(
+                          color: AppTheme.sage,
+                          borderRadius: BorderRadius.circular(36),
+                        ),
+
+                        child: Stack(
+                          alignment: Alignment.center,
+
+                          children: [
+                            // Decorative sparkle
+                            Positioned(
+                              top: 22,
+                              right: 25,
+
+                              child: Icon(
+                                Icons.auto_awesome_rounded,
+                                color: AppTheme.forest.withValues(alpha: 0.35),
+                                size: 28,
+                              ),
+                            ),
+
+                            // Background circle
+                            Container(
+                              width: 210,
+                              height: 210,
+
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.35),
+                              ),
+                            ),
+
+                            // Main leaf illustration
+                            const Icon(
+                              Icons.eco_rounded,
+                              color: AppTheme.forest,
+                              size: 135,
+                            ),
+
+                            // Small floating leaf
+                            const Positioned(
+                              left: 38,
+                              bottom: 70,
+
+                              child: Icon(
+                                Icons.spa_outlined,
+                                color: AppTheme.forest,
+                                size: 32,
+                              ),
+                            ),
+
+                            // Illustration label
+                            Positioned(
+                              bottom: 22,
+
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 9,
+                                ),
+
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+
+                                child: const Text(
+                                  'YOUR FOOD, BETTER UNDERSTOOD',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
+                                    color: AppTheme.forest,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      SizedBox(width: 8),
-                      Icon(Icons.arrow_forward, size: 19),
+
+                      const SizedBox(height: 38),
+
+                      // ----------------------------------
+                      // MAIN HEADING
+                      // ----------------------------------
+                      const Text(
+                        'Fresh choices\nstart here.',
+                        style: TextStyle(
+                          fontSize: 38,
+                          height: 1.08,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1.5,
+                          color: AppTheme.forest,
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      const Text(
+                        'A simpler way to understand the '
+                        'freshness of your fruits and vegetables.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.6,
+                          color: AppTheme.muted,
+                        ),
+                      ),
+
+                      const SizedBox(height: 34),
+
+                      // ----------------------------------
+                      // GET STARTED BUTTON
+                      // ----------------------------------
+                      SizedBox(
+                        width: double.infinity,
+
+                        child: ElevatedButton(
+                          onPressed: () {
+                            openOnboarding(context);
+                          },
+
+                          style: ElevatedButton.styleFrom(
+                            shape: const StadiumBorder(),
+                          ),
+
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+                            children: [
+                              Text('Get Started'),
+
+                              Icon(Icons.arrow_forward_rounded, size: 22),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      // ----------------------------------
+                      // FOOTER
+                      // ----------------------------------
+                      const Center(
+                        child: Text(
+                          'Discover  •  Check  •  Understand',
+                          textAlign: TextAlign.center,
+
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.muted,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-
-              const Spacer(flex: 2),
-            ],
-          ),
+            );
+          },
         ),
-      ),
-
-      bottomNavigationBar: NavigationBar(
-        height: 72,
-        backgroundColor: Colors.white,
-        selectedIndex: 1,
-        indicatorColor: darkGreen,
-        onDestinationSelected: (index) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('More screens coming soon!')),
-          );
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-          NavigationDestination(
-            icon: Icon(Icons.center_focus_strong),
-            label: 'Check',
-          ),
-          NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            label: 'Profile',
-          ),
-        ],
       ),
     );
   }
