@@ -1,0 +1,21 @@
+{
+  "model_name": "FreshTrack_Custom_CNN_V3",
+  "architecture": "Custom CNN from scratch",
+  "pretrained_weights": false,
+  "image_size": [
+    160,
+    160
+  ],
+  "batch_size": 32,
+  "maximum_epochs": 35,
+  "number_of_classes": 32,
+  "training_images": 10402,
+  "validation_images": 2537,
+  "optimizer": "Adam",
+  "initial_learning_rate": 0.001,
+  "loss": "SparseCategoricalCrossentropy",
+  "class_weighting": "Clipped square-root inverse-frequency",
+  "early_stopping_patience": 8,
+  "seed": 42,
+  "timestamp": "2026-11-02T14:05:17.196651"
+}
