@@ -1,0 +1,21 @@
+{
+  "model": "FreshTrack CNN V3",
+  "format": "TensorFlow Lite",
+  "input_shape": [
+    1,
+    160,
+    160,
+    3
+  ],
+  "input_dtype": "float32",
+  "output_shape": [
+    1,
+    32
+  ],
+  "output_dtype": "float32",
+  "input_pixel_range": "0-255",
+  "normalization": "Included inside model",
+  "classes": 32,
+  "test_accuracy": 0.8196,
+  "note": "Model predictions indicate visual freshness classes, not laboratory-confirmed food safety."
+}
