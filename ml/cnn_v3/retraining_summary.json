@@ -1,0 +1,11 @@
+{
+  "model": "FreshTrack CNN V3",
+  "maximum_epochs": 35,
+  "original_images": 15248,
+  "available_images": 15145,
+  "excluded_images": 103,
+  "training": 10334,
+  "validation": 2516,
+  "testing": 2295,
+  "reason": "103 original image records unavailable after restoration"
+}
