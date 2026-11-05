@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../services/cnn_inference_service.dart';
 import '../theme/app_theme.dart';
+
 import 'assessment_result_screen.dart';
 import 'spoilage_alert_screen.dart';
 import 'uncertain_result_screen.dart';
@@ -18,10 +20,20 @@ class ImageReviewScreen extends StatefulWidget {
 }
 
 class _ImageReviewScreenState extends State<ImageReviewScreen> {
+  static const Color forest = AppTheme.forest;
+  static const Color ivory = Color(0xFFF7F8F4);
+  static const Color sage = Color(0xFFDCE9D6);
+  static const Color muted = AppTheme.muted;
+
   final ImagePicker _picker = ImagePicker();
+  final CnnInferenceService _cnnService = CnnInferenceService();
 
   late String _imagePath;
+
   bool _isPickingImage = false;
+  bool _isAnalysing = false;
+
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -29,8 +41,14 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     _imagePath = widget.imagePath;
   }
 
+  @override
+  void dispose() {
+    _cnnService.dispose();
+    super.dispose();
+  }
+
   Future<void> _changePhoto(ImageSource source) async {
-    if (_isPickingImage) return;
+    if (_isPickingImage || _isAnalysing) return;
 
     setState(() => _isPickingImage = true);
 
@@ -44,17 +62,17 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       if (!mounted) return;
 
       if (photo != null) {
-        setState(() => _imagePath = photo.path);
+        setState(() {
+          _imagePath = photo.path;
+          _errorMessage = null;
+        });
       }
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open image: $error'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() {
+        _errorMessage = 'Could not open the selected image.';
+      });
     } finally {
       if (mounted) {
         setState(() => _isPickingImage = false);
@@ -62,137 +80,297 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     }
   }
 
-  void _showFreshResult() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AssessmentResultScreen(
-          imagePath: _imagePath,
-          result: const AssessmentResult(
-            produceName: 'Selected produce (demo)',
-            status: FreshnessStatus.fresh,
-            confidence: 0.91,
-            isDemo: true,
-          ),
-        ),
-      ),
-    );
-  }
+  Future<void> _analyseImage() async {
+    if (_isAnalysing || _isPickingImage) return;
 
-  void _showSpoilageAlert() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SpoilageAlertScreen(
-          imagePath: _imagePath,
-          produceName: 'Selected produce (demo)',
-          confidence: 0.94,
-          isDemo: true,
-        ),
-      ),
-    );
-  }
+    setState(() {
+      _isAnalysing = true;
+      _errorMessage = null;
+    });
 
-  void _showUncertainResult() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UncertainResultScreen(
-          imagePath: _imagePath,
-          produceName: 'Selected produce (demo)',
-          confidence: 0.48,
-          isDemo: true,
-        ),
-      ),
-    );
-  }
+    try {
+      final file = File(_imagePath);
 
-  Widget _photoTip(IconData icon, String title, String description) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppTheme.sage,
-              borderRadius: BorderRadius.circular(12),
+      if (!await file.exists()) {
+        throw const FileSystemException(
+          'The selected image could not be found.',
+        );
+      }
+
+      final imageBytes = await file.readAsBytes();
+
+      final prediction = await _cnnService.predict(imageBytes);
+
+      if (!mounted) return;
+
+      final label = prediction.label;
+      final confidence = prediction.confidence;
+
+      // Temporary threshold until model calibration.
+      const double uncertainThreshold = 0.65;
+
+      if (!confidence.isFinite || confidence < uncertainThreshold) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UncertainResultScreen(
+              imagePath: _imagePath,
+              produceName: label,
+              confidence: confidence.isFinite ? confidence : 0.0,
+              isDemo: false,
             ),
-            child: Icon(icon, color: AppTheme.forest, size: 21),
           ),
-          const SizedBox(width: 12),
-          Expanded(
+        );
+
+        return;
+      }
+
+      // This label mapping is provisional.
+      // Confirm the exact labels.txt naming convention.
+      final normalizedLabel = label.toLowerCase();
+
+      final isSpoiled =
+          normalizedLabel.contains('rotten') ||
+          normalizedLabel.contains('spoiled') ||
+          normalizedLabel.contains('bad');
+
+      if (isSpoiled) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SpoilageAlertScreen(
+              imagePath: _imagePath,
+              produceName: label,
+              confidence: confidence,
+              isDemo: false,
+            ),
+          ),
+        );
+      } else {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AssessmentResultScreen(
+              imagePath: _imagePath,
+              result: AssessmentResult(
+                produceName: label,
+                status: FreshnessStatus.fresh,
+                confidence: confidence,
+                isDemo: false,
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('CNN analysis error: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage =
+            'We could not analyse this photo. '
+            'Please try again or select another image.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isAnalysing = false);
+      }
+    }
+  }
+
+  void _showDemoOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: ivory,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(22),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
+                const Text(
+                  'Demo result screens',
+                  style: TextStyle(
+                    color: forest,
+                    fontSize: 21,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.forest,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.5,
-                    color: AppTheme.muted,
+                const SizedBox(height: 8),
+                const Text(
+                  'These options show simulated results '
+                  'for interface testing only.',
+                  style: TextStyle(color: muted, fontSize: 12, height: 1.5),
+                ),
+                const SizedBox(height: 18),
+                ListTile(
+                  leading: const Icon(
+                    Icons.check_circle_outline,
+                    color: forest,
                   ),
+                  title: const Text('Fresh result'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AssessmentResultScreen(
+                          imagePath: _imagePath,
+                          result: const AssessmentResult(
+                            produceName: 'Selected produce (demo)',
+                            status: FreshnessStatus.fresh,
+                            confidence: 0.91,
+                            isDemo: true,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.redAccent,
+                  ),
+                  title: const Text('Spoilage alert'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SpoilageAlertScreen(
+                          imagePath: _imagePath,
+                          produceName: 'Selected produce (demo)',
+                          confidence: 0.94,
+                          isDemo: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.help_outline, color: Colors.orange),
+                  title: const Text('Uncertain result'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UncertainResultScreen(
+                          imagePath: _imagePath,
+                          produceName: 'Selected produce (demo)',
+                          confidence: 0.48,
+                          isDemo: true,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPhotoPreview() {
+    return Container(
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(17),
+        child: SizedBox(
+          height: 280,
+          width: double.infinity,
+          child: Image.file(
+            File(_imagePath),
+            key: ValueKey(_imagePath),
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: sage,
+                child: const Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: forest,
+                    size: 55,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 
-  Widget _previewButton({
-    required String label,
-    required IconData icon,
-    required VoidCallback onPressed,
-    required Color background,
-    required Color foreground,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _isPickingImage ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: background,
-          foregroundColor: foreground,
-          disabledBackgroundColor: AppTheme.border,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          minimumSize: const Size.fromHeight(56),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(17),
+  Widget _buildPhotoActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _isAnalysing || _isPickingImage
+                ? null
+                : () => _changePhoto(ImageSource.camera),
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: const Text('Retake'),
           ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 2,
-                softWrap: true,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            const Icon(Icons.arrow_forward_rounded, size: 19),
-          ],
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _isAnalysing || _isPickingImage
+                ? null
+                : () => _changePhoto(ImageSource.gallery),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: const Text('Gallery'),
+          ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildChecklist() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Photo quality checklist',
+            style: TextStyle(
+              color: forest,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: 14),
+          _ChecklistItem(icon: Icons.wb_sunny_outlined, text: 'Good lighting'),
+          _ChecklistItem(
+            icon: Icons.center_focus_strong_rounded,
+            text: 'Clear focus',
+          ),
+          _ChecklistItem(
+            icon: Icons.crop_free_rounded,
+            text: 'One main item in the image',
+          ),
+        ],
       ),
     );
   }
@@ -200,216 +378,171 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.ivory,
+      backgroundColor: ivory,
       appBar: AppBar(
-        backgroundColor: AppTheme.ivory,
+        backgroundColor: ivory,
+        foregroundColor: forest,
         elevation: 0,
         centerTitle: true,
         title: const Text(
           'Review your photo',
           style: TextStyle(
-            color: AppTheme.forest,
-            fontSize: 18,
+            color: forest,
+            fontSize: 17,
             fontWeight: FontWeight.w800,
           ),
         ),
       ),
       body: SafeArea(
         child: ListView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 35),
+          padding: const EdgeInsets.fromLTRB(21, 15, 21, 30),
           children: [
             const Text(
-              'BEFORE YOUR ASSESSMENT',
+              'READY TO ANALYSE?',
               style: TextStyle(
-                color: AppTheme.muted,
-                fontSize: 10,
+                color: muted,
+                fontSize: 11,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
+                letterSpacing: 1.5,
               ),
             ),
             const SizedBox(height: 10),
             const Text(
               'Looking good?',
               style: TextStyle(
-                color: AppTheme.forest,
+                color: forest,
                 fontSize: 30,
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Make sure the food is clearly visible '
+              'Make sure your produce is clearly visible '
               'before continuing.',
-              style: TextStyle(
-                color: AppTheme.muted,
-                fontSize: 13,
-                height: 1.5,
-              ),
+              style: TextStyle(color: muted, fontSize: 13, height: 1.5),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
 
-            ClipRRect(
-              borderRadius: BorderRadius.circular(23),
-              child: SizedBox(
-                width: double.infinity,
-                height: 245,
-                child: Image.file(
-                  File(_imagePath),
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: AppTheme.sage,
-                    child: const Icon(
-                      Icons.broken_image_outlined,
-                      size: 58,
-                      color: AppTheme.forest,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
+            _buildPhotoPreview(),
 
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isPickingImage
-                        ? null
-                        : () => _changePhoto(ImageSource.camera),
-                    child: const Text('Retake photo'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isPickingImage
-                        ? null
-                        : () => _changePhoto(ImageSource.gallery),
-                    child: const Text('Gallery'),
-                  ),
-                ),
-              ],
-            ),
+            const SizedBox(height: 15),
+
+            _buildPhotoActions(),
 
             const SizedBox(height: 24),
 
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 20, 18, 5),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(21),
-                border: Border.all(color: AppTheme.border),
+            _buildChecklist(),
+
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBE5E2),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: Color(0xFFA34439),
+                    fontSize: 13,
+                  ),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Photo quality checklist',
-                    style: TextStyle(
-                      color: AppTheme.forest,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  _photoTip(
-                    Icons.wb_sunny_outlined,
-                    'Good lighting',
-                    'The food should be well lit.',
-                  ),
-                  _photoTip(
-                    Icons.center_focus_strong_rounded,
-                    'Clear focus',
-                    'Avoid blurry or distant images.',
-                  ),
-                  _photoTip(
-                    Icons.crop_free_rounded,
-                    'One main item',
-                    'Keep the produce centred in the photo.',
-                  ),
-                ],
-              ),
-            ),
+            ],
 
             const SizedBox(height: 24),
 
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.sage,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.science_outlined, color: AppTheme.forest),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'DEMO MODE\n'
-                      'Choose a result below to preview its '
-                      'screen. No CNN analysis is performed '
-                      'on your photo yet.',
-                      style: TextStyle(
-                        color: AppTheme.forest,
-                        fontSize: 12,
-                        height: 1.6,
-                      ),
-                    ),
+            SizedBox(
+              height: 58,
+              child: ElevatedButton.icon(
+                onPressed: _isAnalysing || _isPickingImage
+                    ? null
+                    : _analyseImage,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: forest,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppTheme.border,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                ],
+                ),
+                icon: _isAnalysing
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.auto_awesome_outlined),
+                label: Text(
+                  _isAnalysing ? 'Analysing image...' : 'Analyse freshness',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 15),
 
-            const Text(
-              'Preview a result',
-              style: TextStyle(
-                color: AppTheme.forest,
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
+            TextButton(
+              onPressed: _isAnalysing || _isPickingImage
+                  ? null
+                  : _showDemoOptions,
+              child: const Text(
+                'Preview demo result screens',
+                style: TextStyle(
+                  color: forest,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Select one of the three demonstration outcomes.',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
 
-            _previewButton(
-              label: 'Fresh result',
-              icon: Icons.check_circle_outline_rounded,
-              onPressed: _showFreshResult,
-              background: AppTheme.forest,
-              foreground: Colors.white,
-            ),
-            const SizedBox(height: 11),
-            _previewButton(
-              label: 'Spoilage alert',
-              icon: Icons.warning_amber_rounded,
-              onPressed: _showSpoilageAlert,
-              background: const Color(0xFFFBE5E2),
-              foreground: const Color(0xFFA34439),
-            ),
-            const SizedBox(height: 11),
-            _previewButton(
-              label: 'Uncertain result',
-              icon: Icons.help_outline_rounded,
-              onPressed: _showUncertainResult,
-              background: const Color(0xFFFFF0D8),
-              foreground: const Color(0xFF91621D),
-            ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
+
             const Text(
-              'All outcomes shown above are simulated.',
+              'AI predictions are based on visible appearance '
+              'and do not guarantee food safety.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: TextStyle(color: muted, fontSize: 11, height: 1.5),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ChecklistItem extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _ChecklistItem({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.forest, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppTheme.forest,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -26,223 +26,209 @@ class FreshTrackApp extends StatelessWidget {
 }
 
 // ==========================================
-// SPLASH / WELCOME SCREEN
+// FRESHTRACK LANDING / WELCOME SCREEN
 // ==========================================
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
-  void openOnboarding(BuildContext context) {
+  static const Color forest = AppTheme.forest;
+  static const Color lime = Color(0xFFC6F0A5);
+  static const Color paleGreen = Color(0xFFDCE9D6);
+  static const Color softGreen = Color(0xFF2A5340);
+
+  void _openOnboarding(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const OnboardingScreen()),
+      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.ivory,
-
+      backgroundColor: forest,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final compact = constraints.maxHeight < 650;
+
             return SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
-
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(26, 20, 26, 28),
-
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 26),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ----------------------------------
                       // BRAND HEADER
-                      // ----------------------------------
-
                       const Row(
                         children: [
-                          Icon(
-                            Icons.spa_rounded,
-                            color: AppTheme.forest,
-                            size: 28,
-                          ),
-
+                          Icon(Icons.eco_rounded, color: lime, size: 29),
                           SizedBox(width: 8),
-
                           Text(
                             'freshtrack.',
                             style: TextStyle(
-                              fontSize: 22,
+                              color: Colors.white,
+                              fontSize: 24,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: -0.8,
-                              color: AppTheme.forest,
+                              letterSpacing: -0.9,
                             ),
                           ),
                         ],
                       ),
 
-                      const SizedBox(height: 46),
+                      SizedBox(height: compact ? 28 : 45),
 
-                      // ----------------------------------
                       // HERO ILLUSTRATION
-                      // ----------------------------------
-                      Container(
-                        height: 290,
-                        width: double.infinity,
-
-                        decoration: BoxDecoration(
-                          color: AppTheme.sage,
-                          borderRadius: BorderRadius.circular(36),
-                        ),
-
-                        child: Stack(
-                          alignment: Alignment.center,
-
-                          children: [
-                            // Decorative sparkle
-                            Positioned(
-                              top: 22,
-                              right: 25,
-
-                              child: Icon(
-                                Icons.auto_awesome_rounded,
-                                color: AppTheme.forest.withValues(alpha: 0.35),
-                                size: 28,
-                              ),
-                            ),
-
-                            // Background circle
-                            Container(
-                              width: 210,
-                              height: 210,
-
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.35),
-                              ),
-                            ),
-
-                            // Main leaf illustration
-                            const Icon(
-                              Icons.eco_rounded,
-                              color: AppTheme.forest,
-                              size: 135,
-                            ),
-
-                            // Small floating leaf
-                            const Positioned(
-                              left: 38,
-                              bottom: 70,
-
-                              child: Icon(
-                                Icons.spa_outlined,
-                                color: AppTheme.forest,
-                                size: 32,
-                              ),
-                            ),
-
-                            // Illustration label
-                            Positioned(
-                              bottom: 22,
-
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 9,
-                                ),
-
+                      Center(
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: compact ? 205 : 270,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // OUTER CIRCLE
+                              Container(
+                                width: compact ? 185 : 245,
+                                height: compact ? 185 : 245,
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-
-                                child: const Text(
-                                  'YOUR FOOD, BETTER UNDERSTOOD',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                    color: AppTheme.forest,
+                                  color: softGreen,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    width: 1.5,
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
 
-                      const SizedBox(height: 38),
+                              // INNER CIRCLE
+                              Container(
+                                width: compact ? 145 : 195,
+                                height: compact ? 145 : 195,
+                                decoration: BoxDecoration(
+                                  color: lime.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
 
-                      // ----------------------------------
-                      // MAIN HEADING
-                      // ----------------------------------
-                      const Text(
-                        'Fresh choices\nstart here.',
-                        style: TextStyle(
-                          fontSize: 38,
-                          height: 1.08,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1.5,
-                          color: AppTheme.forest,
-                        ),
-                      ),
+                              // MAIN ILLUSTRATION
+                              Icon(
+                                Icons.eco_rounded,
+                                color: lime,
+                                size: compact ? 105 : 140,
+                              ),
 
-                      const SizedBox(height: 18),
+                              // DECORATIVE SPARKLE
+                              Positioned(
+                                top: compact ? 12 : 20,
+                                right: 32,
+                                child: Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: lime.withValues(alpha: 0.8),
+                                  size: 25,
+                                ),
+                              ),
 
-                      const Text(
-                        'A simpler way to understand the '
-                        'freshness of your fruits and vegetables.',
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1.6,
-                          color: AppTheme.muted,
-                        ),
-                      ),
-
-                      const SizedBox(height: 34),
-
-                      // ----------------------------------
-                      // GET STARTED BUTTON
-                      // ----------------------------------
-                      SizedBox(
-                        width: double.infinity,
-
-                        child: ElevatedButton(
-                          onPressed: () {
-                            openOnboarding(context);
-                          },
-
-                          style: ElevatedButton.styleFrom(
-                            shape: const StadiumBorder(),
-                          ),
-
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
-                            children: [
-                              Text('Get Started'),
-
-                              Icon(Icons.arrow_forward_rounded, size: 22),
+                              // SMALL DECORATIVE LEAF
+                              Positioned(
+                                bottom: compact ? 17 : 25,
+                                left: 28,
+                                child: const Icon(
+                                  Icons.spa_outlined,
+                                  color: paleGreen,
+                                  size: 27,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 22),
+                      SizedBox(height: compact ? 25 : 40),
 
-                      // ----------------------------------
+                      // INTRODUCTION LABEL
+                      const Text(
+                        'WELCOME TO FRESHTRACK',
+                        style: TextStyle(
+                          color: lime,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // MAIN HEADING
+                      Text(
+                        'Fresh choices\nstart here.',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 34 : 39,
+                          fontWeight: FontWeight.w800,
+                          height: 1.12,
+                          letterSpacing: -1.3,
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // DESCRIPTION
+                      const Text(
+                        'A simpler way to understand the visible '
+                        'freshness of your fruits and vegetables.',
+                        style: TextStyle(
+                          color: paleGreen,
+                          fontSize: 15,
+                          height: 1.6,
+                        ),
+                      ),
+
+                      SizedBox(height: compact ? 25 : 38),
+
+                      // GET STARTED BUTTON
+                      SizedBox(
+                        width: double.infinity,
+                        height: 58,
+                        child: ElevatedButton(
+                          onPressed: () => _openOnboarding(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: lime,
+                            foregroundColor: forest,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Get started',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Icon(Icons.arrow_forward_rounded, size: 21),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 23),
+
                       // FOOTER
-                      // ----------------------------------
                       const Center(
                         child: Text(
                           'Discover  •  Check  •  Understand',
                           textAlign: TextAlign.center,
-
                           style: TextStyle(
+                            color: paleGreen,
                             fontSize: 12,
-                            color: AppTheme.muted,
                             letterSpacing: 0.4,
                           ),
                         ),
