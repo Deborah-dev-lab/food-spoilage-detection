@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'history_screen.dart';
+import 'learning_hub_screen.dart';
+import 'vendor/vendor_dashboard_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,6 +15,27 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _notificationsEnabled = false;
 
+  void _openVendorWorkspace() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const VendorDashboardScreen()),
+    );
+  }
+
+  void _openHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const HistoryScreen()),
+    );
+  }
+
+  void _openLearningHub() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LearningHubScreen()),
+    );
+  }
+
   void _showInformation({required String title, required String content}) {
     showModalBottomSheet<void>(
       context: context,
@@ -23,51 +46,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 30),
+          child: FractionallySizedBox(
+            heightFactor: 0.75,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 42,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AppTheme.border,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                const SizedBox(height: 14),
+                Container(
+                  width: 42,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: AppTheme.border,
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                const SizedBox(height: 22),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.forest,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 14, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: AppTheme.forest,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  content,
-                  style: const TextStyle(
-                    color: AppTheme.muted,
-                    fontSize: 14,
-                    height: 1.7,
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(22, 4, 22, 25),
+                    child: Text(
+                      content,
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 14,
+                        height: 1.7,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -79,6 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _openNotificationPreferences() {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.ivory,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -103,24 +129,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      'Choose whether you would like '
-                      'to receive FreshTrack reminders '
-                      'when notification support is added.',
+                      'Preview your reminder preferences. '
+                      'Notifications are not active yet.',
                       style: TextStyle(
+                        color: AppTheme.muted,
                         fontSize: 13,
                         height: 1.6,
-                        color: AppTheme.muted,
                       ),
                     ),
                     const SizedBox(height: 20),
                     SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
                       value: _notificationsEnabled,
                       activeTrackColor: AppTheme.forest,
                       title: const Text(
                         'Enable reminders',
                         style: TextStyle(
-                          fontWeight: FontWeight.w700,
                           color: AppTheme.forest,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       subtitle: const Text('Preference preview only'),
@@ -131,15 +157,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         setSheetState(() {});
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     const Text(
-                      'Notifications are not active yet. '
-                      'This setting is not saved after '
-                      'the app restarts.',
+                      'This setting is temporary and resets '
+                      'when the app restarts. No notifications '
+                      'will be scheduled.',
                       style: TextStyle(
                         color: AppTheme.muted,
                         fontSize: 12,
-                        height: 1.5,
+                        height: 1.6,
                       ),
                     ),
                   ],
@@ -152,26 +178,252 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openHistory() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const HistoryScreen()),
-    );
-  }
-
   void _openHistoryManagement() {
     _showInformation(
       title: 'History management',
       content:
-          'Your assessment history will be stored '
-          'locally on your device once the storage '
-          'feature is implemented.\n\n'
-          'You will be able to review and delete '
-          'individual assessments or clear your '
-          'saved history.\n\n'
-          'The records currently displayed in '
-          'FreshTrack are demonstration entries, '
-          'not actual saved assessments.',
+          'Assessment history will be stored locally '
+          'when the database is integrated.\n\n'
+          'You will then be able to review saved '
+          'assessments, delete individual records '
+          'and clear your history.\n\n'
+          'The current History screen uses '
+          'demonstration entries.',
+    );
+  }
+
+  void _openAbout() {
+    _showInformation(
+      title: 'About FreshTrack',
+      content:
+          'FreshTrack is a smartphone-based food '
+          'freshness and spoilage assessment application '
+          'developed as an academic project.\n\n'
+          'It uses computer vision and a convolutional '
+          'neural network (CNN) to analyse visible '
+          'patterns in supported fruits and vegetables.\n\n'
+          'The current Android prototype includes '
+          'on-device TensorFlow Lite inference, '
+          'household assessment screens and a '
+          'vendor workspace.\n\n'
+          'FreshTrack is designed with offline '
+          'accessibility in mind, particularly for '
+          'households and small-scale produce vendors.\n\n'
+          'The model is experimental and may produce '
+          'incorrect classifications. A visual assessment '
+          'cannot confirm that food is safe to consume.',
+    );
+  }
+
+  void _openHelp() {
+    _showInformation(
+      title: 'Help & FAQs',
+      content:
+          'How do I assess produce?\n'
+          'Open Scan Produce, capture or select a clear '
+          'photograph, review the image and continue '
+          'to the assessment.\n\n'
+          'What does the model score mean?\n'
+          'The score indicates how strongly the model '
+          'favours its predicted class. It is not '
+          'a calibrated probability of correctness '
+          'or a guarantee of food safety.\n\n'
+          'What if the result is uncertain?\n'
+          'Try another clear image with good lighting '
+          'and inspect the produce manually.\n\n'
+          'Can FreshTrack detect bacteria or toxins?\n'
+          'No. A smartphone photograph cannot reliably '
+          'identify invisible pathogens, toxins '
+          'or other contamination.\n\n'
+          'How do I use Vendor Mode?\n'
+          'Open Vendor Workspace to access stock entry, '
+          'inventory, assessments and handling guidance. '
+          'Stock records currently use prototype data.\n\n'
+          'Where can I learn more about food handling?\n'
+          'Open Learn & Explore for offline articles '
+          'about food safety and value addition.\n\n'
+          'Does FreshTrack work offline?\n'
+          'The integrated CNN is designed to run '
+          'on-device. Persistent offline storage '
+          'will be added during database integration.',
+    );
+  }
+
+  void _openPrivacy() {
+    _showInformation(
+      title: 'Privacy & data',
+      content:
+          'FreshTrack is currently an academic prototype.\n\n'
+          'The application uses on-device image processing '
+          'for its TensorFlow Lite assessment workflow. '
+          'This does not require uploading an image '
+          'to a cloud inference service.\n\n'
+          'Local database storage for inventory, '
+          'assessment history and feedback has not '
+          'yet been implemented.\n\n'
+          'A complete privacy review will be carried '
+          'out before release, including image retention, '
+          'local storage, permissions and deletion controls.\n\n'
+          'Avoid including personal or sensitive '
+          'information in assessment photographs.',
+    );
+  }
+
+  Widget _sectionHeading(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: AppTheme.muted,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 39,
+                height: 39,
+                decoration: BoxDecoration(
+                  color: AppTheme.sage,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: AppTheme.forest, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppTheme.forest,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsGroup(List<Widget> children) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        children: [
+          for (int i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              const Divider(
+                height: 1,
+                indent: 65,
+                endIndent: 16,
+                color: AppTheme.border,
+              ),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _vendorCard() {
+    return Material(
+      color: AppTheme.forest,
+      borderRadius: BorderRadius.circular(23),
+      child: InkWell(
+        onTap: _openVendorWorkspace,
+        borderRadius: BorderRadius.circular(23),
+        child: Padding(
+          padding: const EdgeInsets.all(19),
+          child: Row(
+            children: [
+              Container(
+                width: 49,
+                height: 49,
+                decoration: BoxDecoration(
+                  color: AppTheme.lime,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.storefront_outlined,
+                  color: AppTheme.forest,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Vendor workspace',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Manage produce stock and explore '
+                      'handling recommendations.',
+                      style: TextStyle(
+                        color: Color(0xFFC8DACD),
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: AppTheme.lime,
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -181,20 +433,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: AppTheme.ivory,
       appBar: AppBar(
         backgroundColor: AppTheme.ivory,
+        foregroundColor: AppTheme.forest,
         elevation: 0,
         centerTitle: true,
         title: const Text(
           'Profile & settings',
           style: TextStyle(
+            color: AppTheme.forest,
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: AppTheme.forest,
           ),
         ),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 35),
           children: [
             const Text(
               'YOUR SPACE',
@@ -202,7 +455,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: AppTheme.muted,
                 fontSize: 10,
                 letterSpacing: 1.6,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 9),
@@ -216,9 +469,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 letterSpacing: -0.8,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 23),
 
-            // USER PROFILE
+            // GUEST PROFILE
             Container(
               padding: const EdgeInsets.all(19),
               decoration: BoxDecoration(
@@ -251,10 +504,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         SizedBox(height: 5),
                         Text(
-                          'Local guest profile',
+                          'Local guest profile • No account required',
                           style: TextStyle(
                             color: Color(0xFFC8DACD),
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                         ),
                       ],
@@ -265,140 +518,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: 29),
+            const SizedBox(height: 27),
 
-            const _SectionHeading('PREFERENCES'),
-            const SizedBox(height: 12),
-
-            _SettingsGroup(
-              children: [
-                _SettingsTile(
-                  icon: Icons.notifications_none_rounded,
-                  title: 'Notification preferences',
-                  subtitle: 'Manage future reminders',
-                  onTap: _openNotificationPreferences,
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.history_rounded,
-                  title: 'Assessment history',
-                  subtitle: 'View previous food checks',
-                  onTap: _openHistory,
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.delete_outline_rounded,
-                  title: 'History management',
-                  subtitle: 'Manage saved assessments',
-                  onTap: _openHistoryManagement,
-                ),
-              ],
-            ),
+            _sectionHeading('VENDOR MODE'),
+            _vendorCard(),
 
             const SizedBox(height: 28),
 
-            const _SectionHeading('INFORMATION'),
-            const SizedBox(height: 12),
+            _sectionHeading('PREFERENCES'),
+            _settingsGroup([
+              _settingsTile(
+                icon: Icons.notifications_none_rounded,
+                title: 'Notification preferences',
+                subtitle: 'Preview future reminders',
+                onTap: _openNotificationPreferences,
+              ),
+              _settingsTile(
+                icon: Icons.history_rounded,
+                title: 'Assessment history',
+                subtitle: 'View previous food checks',
+                onTap: _openHistory,
+              ),
+              _settingsTile(
+                icon: Icons.delete_outline_rounded,
+                title: 'History management',
+                subtitle: 'Future storage and deletion controls',
+                onTap: _openHistoryManagement,
+              ),
+            ]),
 
-            _SettingsGroup(
-              children: [
-                _SettingsTile(
-                  icon: Icons.info_outline_rounded,
-                  title: 'About FreshTrack',
-                  subtitle: 'Learn about this project',
-                  onTap: () {
-                    _showInformation(
-                      title: 'About FreshTrack',
-                      content:
-                          'FreshTrack is a smartphone-based '
-                          'food spoilage detection application '
-                          'developed as an academic project.\n\n'
-                          'The system is designed to use '
-                          'computer vision and a convolutional '
-                          'neural network (CNN) to classify '
-                          'visible freshness and spoilage '
-                          'patterns in supported fruits '
-                          'and vegetables.\n\n'
-                          'Its objective is to provide '
-                          'accessible food quality guidance '
-                          'using smartphone photographs, '
-                          'including in low-resource settings.\n\n'
-                          'The CNN model has not yet been '
-                          'integrated into this interface.',
-                    );
-                  },
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.help_outline_rounded,
-                  title: 'Help & FAQs',
-                  subtitle: 'How to use the application',
-                  onTap: () {
-                    _showInformation(
-                      title: 'Help & FAQs',
-                      content:
-                          'How do I assess my food?\n'
-                          'Open the Check screen, take a '
-                          'clear photograph or select an '
-                          'existing image, then review it '
-                          'before continuing.\n\n'
-                          'What does the confidence score mean?\n'
-                          'It indicates how strongly the '
-                          'model favours a classification. '
-                          'It is not a guarantee of safety.\n\n'
-                          'Can FreshTrack detect bacteria?\n'
-                          'No. Image-based assessment cannot '
-                          'reliably detect invisible bacteria, '
-                          'toxins or other contamination.\n\n'
-                          'Does the app work offline?\n'
-                          'Offline assessment is a project '
-                          'goal. It will depend on the final '
-                          'model integration and local storage.',
-                    );
-                  },
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.shield_outlined,
-                  title: 'Privacy & data',
-                  subtitle: 'How your information is handled',
-                  onTap: () {
-                    _showInformation(
-                      title: 'Privacy & data',
-                      content:
-                          'FreshTrack is currently an '
-                          'academic prototype.\n\n'
-                          'The current image-selection '
-                          'workflow displays photographs '
-                          'chosen or captured on your device. '
-                          'No cloud upload feature has been '
-                          'implemented in the Flutter screens '
-                          'created so far.\n\n'
-                          'Actual image retention, local '
-                          'history storage and data deletion '
-                          'controls will be defined and tested '
-                          'when persistence is implemented.\n\n'
-                          'Avoid including personal or '
-                          'sensitive information in '
-                          'assessment photographs.',
-                    );
-                  },
-                ),
-              ],
-            ),
+            const SizedBox(height: 28),
 
-            const SizedBox(height: 34),
+            _sectionHeading('LEARNING & RESOURCES'),
+            _settingsGroup([
+              _settingsTile(
+                icon: Icons.menu_book_outlined,
+                title: 'Learn & Explore',
+                subtitle: 'Food safety and value addition articles',
+                onTap: _openLearningHub,
+              ),
+            ]),
 
-            Center(
+            const SizedBox(height: 28),
+
+            _sectionHeading('INFORMATION'),
+            _settingsGroup([
+              _settingsTile(
+                icon: Icons.info_outline_rounded,
+                title: 'About FreshTrack',
+                subtitle: 'Learn about the project',
+                onTap: _openAbout,
+              ),
+              _settingsTile(
+                icon: Icons.help_outline_rounded,
+                title: 'Help & FAQs',
+                subtitle: 'How to use the application',
+                onTap: _openHelp,
+              ),
+              _settingsTile(
+                icon: Icons.shield_outlined,
+                title: 'Privacy & data',
+                subtitle: 'Understand how data is handled',
+                onTap: _openPrivacy,
+              ),
+            ]),
+
+            const SizedBox(height: 32),
+
+            const Center(
               child: Column(
                 children: [
-                  const Icon(
-                    Icons.spa_outlined,
-                    size: 26,
-                    color: AppTheme.forest,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  Icon(Icons.spa_outlined, size: 26, color: AppTheme.forest),
+                  SizedBox(height: 8),
+                  Text(
                     'FreshTrack',
                     style: TextStyle(
                       fontSize: 15,
@@ -406,13 +598,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: AppTheme.forest,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
+                  SizedBox(height: 4),
+                  Text(
                     'Academic prototype • Version 1.0',
                     style: TextStyle(fontSize: 11, color: AppTheme.muted),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
+                  SizedBox(height: 6),
+                  Text(
                     'A fresher way to make informed choices.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 11, color: AppTheme.muted),
@@ -421,130 +613,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// REUSABLE COMPONENTS
-// =====================================================
-
-class _SectionHeading extends StatelessWidget {
-  final String title;
-
-  const _SectionHeading(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: AppTheme.muted,
-        fontSize: 11,
-        letterSpacing: 1.4,
-        fontWeight: FontWeight.w800,
-      ),
-    );
-  }
-}
-
-class _SettingsGroup extends StatelessWidget {
-  final List<Widget> children;
-
-  const _SettingsGroup({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _SettingsDivider extends StatelessWidget {
-  const _SettingsDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Divider(
-      height: 1,
-      indent: 62,
-      endIndent: 16,
-      color: AppTheme.border,
-    );
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 37,
-                height: 37,
-                decoration: BoxDecoration(
-                  color: AppTheme.sage,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(icon, size: 20, color: AppTheme.forest),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: AppTheme.forest,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppTheme.muted,
-                size: 21,
-              ),
-            ],
-          ),
         ),
       ),
     );

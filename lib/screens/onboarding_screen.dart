@@ -20,33 +20,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   int _currentPage = 0;
 
+  // All images are from the existing learning folder.
   final List<_OnboardingPageData> _pages = const [
     _OnboardingPageData(
       icon: Icons.camera_alt_outlined,
+      imagePath: 'assets/images/learning/food_safety.jpg',
       number: '01',
       eyebrow: 'DISCOVER',
       title: 'Check your food\nfreshness.',
       description:
-          'Capture a photo of your fruits or vegetables '
-          'to explore their visible freshness.',
+          'Capture or upload a photo of your fruits and vegetables '
+          'to explore visible signs of freshness and spoilage.',
     ),
     _OnboardingPageData(
-      icon: Icons.eco_outlined,
+      icon: Icons.visibility_outlined,
+      imagePath: 'assets/images/learning/food_spoilage.jpg',
       number: '02',
       eyebrow: 'UNDERSTAND',
       title: 'Know your\nproduce better.',
       description:
-          'Identify visible signs of spoilage and '
-          'learn more about the quality of your food.',
+          'Explore image-based freshness assessments '
+          'and learn to recognise possible signs of spoilage '
+          'to support informed food handling decisions.',
     ),
     _OnboardingPageData(
-      icon: Icons.verified_outlined,
+      icon: Icons.menu_book_outlined,
+      imagePath: 'assets/images/learning/value_addition.jpg',
       number: '03',
-      eyebrow: 'MAKE INFORMED CHOICES',
-      title: 'Make every\ncheck count.',
+      eyebrow: 'LEARN & EXPLORE',
+      title: 'Learn, preserve\nand reduce waste.',
       description:
-          'Get helpful freshness insights to support '
-          'better food handling decisions.',
+          'Discover offline food safety articles, '
+          'produce storage guidance and value addition '
+          'ideas to help reduce avoidable food waste.',
     ),
   ];
 
@@ -74,9 +80,169 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
+  // =====================================================
+  // ONBOARDING IMAGE
+  // =====================================================
+
+  Widget _buildImage(_OnboardingPageData page, bool compact) {
+    final double imageHeight = compact ? 190 : 270;
+
+    return SizedBox(
+      width: double.infinity,
+      height: imageHeight,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Image.asset(
+                page.imagePath,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: softGreen,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      page.icon,
+                      color: lime,
+                      size: compact ? 65 : 85,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          // Gradient for better contrast.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(28),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, forest.withValues(alpha: 0.5)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Small FreshTrack label.
+          Positioned(
+            top: 15,
+            left: 15,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: forest.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.eco_outlined, color: lime, size: 15),
+                  SizedBox(width: 6),
+                  Text(
+                    'FRESHTRACK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Page number.
+          Positioned(
+            right: 18,
+            bottom: 15,
+            child: Text(
+              page.number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =====================================================
+  // INDIVIDUAL ONBOARDING PAGE
+  // =====================================================
+
+  Widget _buildPage(_OnboardingPageData page, BoxConstraints constraints) {
+    final bool compact = constraints.maxHeight < 520;
+
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildImage(page, compact),
+
+            SizedBox(height: compact ? 23 : 35),
+
+            Text(
+              page.eyebrow,
+              style: const TextStyle(
+                color: lime,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Text(
+              page.title,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: compact ? 29 : 36,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1.2,
+                height: 1.12,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Text(
+              page.description,
+              style: const TextStyle(
+                color: paleGreen,
+                fontSize: 15,
+                height: 1.6,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =====================================================
+  // MAIN SCREEN
+  // =====================================================
+
   @override
   Widget build(BuildContext context) {
-    final isLastPage = _currentPage == _pages.length - 1;
+    final bool isLastPage = _currentPage == _pages.length - 1;
 
     return Scaffold(
       backgroundColor: forest,
@@ -117,7 +283,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
               const SizedBox(height: 8),
 
-              // RESPONSIVE ONBOARDING PAGES
+              // SWIPEABLE ONBOARDING PAGES
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
@@ -128,148 +294,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     });
                   },
                   itemBuilder: (context, index) {
-                    final page = _pages[index];
-
                     return LayoutBuilder(
                       builder: (context, constraints) {
-                        final compact = constraints.maxHeight < 520;
-
-                        final illustrationHeight = compact ? 150.0 : 220.0;
-
-                        final circleSize = compact ? 140.0 : 200.0;
-
-                        final innerCircleSize = compact ? 105.0 : 150.0;
-
-                        return SingleChildScrollView(
-                          physics: const ClampingScrollPhysics(),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: constraints.maxHeight,
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // ILLUSTRATION
-                                Center(
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    height: illustrationHeight,
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Container(
-                                          width: circleSize,
-                                          height: circleSize,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: softGreen,
-                                            border: Border.all(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.09,
-                                              ),
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                        ),
-
-                                        Container(
-                                          width: innerCircleSize,
-                                          height: innerCircleSize,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: lime.withValues(alpha: 0.13),
-                                          ),
-                                          child: Icon(
-                                            page.icon,
-                                            size: compact ? 58 : 80,
-                                            color: lime,
-                                          ),
-                                        ),
-
-                                        Positioned(
-                                          top: compact ? 4 : 12,
-                                          right: 25,
-                                          child: _DecorativeDot(
-                                            size: 12,
-                                            color: lime.withValues(alpha: 0.8),
-                                          ),
-                                        ),
-
-                                        Positioned(
-                                          bottom: compact ? 8 : 22,
-                                          left: 20,
-                                          child: _DecorativeDot(
-                                            size: 9,
-                                            color: paleGreen.withValues(
-                                              alpha: 0.7,
-                                            ),
-                                          ),
-                                        ),
-
-                                        Positioned(
-                                          bottom: compact ? 8 : 22,
-                                          right: 28,
-                                          child: Text(
-                                            page.number,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w800,
-                                              color: paleGreen.withValues(
-                                                alpha: 0.65,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-
-                                SizedBox(height: compact ? 20 : 32),
-
-                                // PAGE EYEBROW
-                                Text(
-                                  page.eyebrow,
-                                  style: const TextStyle(
-                                    color: lime,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 2,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 12),
-
-                                // PAGE TITLE
-                                Text(
-                                  page.title,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: compact ? 29 : 36,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -1.2,
-                                    height: 1.12,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // PAGE DESCRIPTION
-                                Text(
-                                  page.description,
-                                  style: const TextStyle(
-                                    color: paleGreen,
-                                    fontSize: 15,
-                                    height: 1.6,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 16),
-                              ],
-                            ),
-                          ),
-                        );
+                        return _buildPage(_pages[index], constraints);
                       },
                     );
                   },
@@ -298,9 +325,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       );
                     }),
                   ),
-
                   const Spacer(),
-
                   Text(
                     '${_currentPage + 1} / ${_pages.length}',
                     style: const TextStyle(
@@ -314,7 +339,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
               const SizedBox(height: 22),
 
-              // CONTINUE BUTTON
+              // CONTINUE / GET STARTED BUTTON
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -338,9 +363,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-
                       const SizedBox(width: 12),
-
                       const Icon(Icons.arrow_forward_rounded, size: 21),
                     ],
                   ),
@@ -366,9 +389,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// ONBOARDING PAGE CONTENT MODEL
+// =====================================================
+// ONBOARDING PAGE DATA MODEL
+// =====================================================
+
 class _OnboardingPageData {
   final IconData icon;
+  final String imagePath;
   final String number;
   final String eyebrow;
   final String title;
@@ -376,26 +403,10 @@ class _OnboardingPageData {
 
   const _OnboardingPageData({
     required this.icon,
+    required this.imagePath,
     required this.number,
     required this.eyebrow,
     required this.title,
     required this.description,
   });
-}
-
-// SMALL DECORATIVE CIRCLE
-class _DecorativeDot extends StatelessWidget {
-  final double size;
-  final Color color;
-
-  const _DecorativeDot({required this.size, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
 }

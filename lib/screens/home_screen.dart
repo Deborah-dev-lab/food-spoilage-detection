@@ -4,8 +4,10 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import 'camera_screen.dart';
 import 'history_screen.dart';
+import 'learning_hub_screen.dart';
 import 'profile_screen.dart';
 import 'spoilage_alert_screen.dart';
+import 'vendor/vendor_dashboard_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -45,6 +47,22 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  void _openVendorDashboard(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const VendorDashboardScreen()),
+    );
+  }
+
+  void _openLearningHub(BuildContext context, {String category = 'All'}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LearningHubScreen(initialCategory: category),
+      ),
+    );
+  }
+
   Future<void> _previewSpoilageAlert(BuildContext context) async {
     try {
       final photo = await ImagePicker().pickImage(
@@ -68,7 +86,6 @@ class HomeScreen extends StatelessWidget {
       );
     } catch (error) {
       if (!context.mounted) return;
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Could not open photo: $error')));
@@ -86,10 +103,14 @@ class HomeScreen extends StatelessWidget {
             _buildHeader(context),
             const SizedBox(height: 30),
             _buildGreeting(),
-            const SizedBox(height: 25),
+            const SizedBox(height: 20),
+            _buildVendorModeCard(context),
+            const SizedBox(height: 24),
             _buildScanCard(context),
             const SizedBox(height: 15),
             _buildQuickActions(context),
+            const SizedBox(height: 30),
+            _buildLearningSection(context),
             const SizedBox(height: 30),
             _buildRecentActivity(context),
             const SizedBox(height: 24),
@@ -230,6 +251,64 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildVendorModeCard(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(21),
+      child: InkWell(
+        onTap: () => _openVendorDashboard(context),
+        borderRadius: BorderRadius.circular(21),
+        child: Container(
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 49,
+                height: 49,
+                decoration: BoxDecoration(
+                  color: sage,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.storefront_outlined,
+                  color: forest,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 13),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Are you a produce vendor?',
+                      style: TextStyle(
+                        color: forest,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    Text(
+                      'Open your vendor workspace',
+                      style: TextStyle(color: muted, fontSize: 12, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_rounded, color: forest, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildScanCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(22),
@@ -350,6 +429,91 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  // =====================================================
+  // LEARN & EXPLORE WITH REAL LOCAL IMAGES
+  // =====================================================
+
+  Widget _buildLearningSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Learn & Explore',
+                style: TextStyle(
+                  color: forest,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _openLearningHub(context),
+              child: const Text(
+                'View all',
+                style: TextStyle(color: forest, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        const Text(
+          'Practical knowledge for safer handling '
+          'and smarter use of produce.',
+          style: TextStyle(color: muted, fontSize: 12, height: 1.5),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _LearningCategoryCard(
+                title: 'Food Safety',
+                subtitle: 'Storage, hygiene and spoilage awareness.',
+                imagePath: 'assets/images/learning/food_safety.jpg',
+                icon: Icons.health_and_safety_outlined,
+                background: const Color(0xFFE4F1E6),
+                onTap: () => _openLearningHub(context, category: 'Food Safety'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _LearningCategoryCard(
+                title: 'Value Addition',
+                subtitle: 'Processing, preservation and reducing waste.',
+                imagePath: 'assets/images/learning/value_addition.jpg',
+                icon: Icons.auto_awesome_outlined,
+                background: const Color(0xFFFFE9D7),
+                onTap: () =>
+                    _openLearningHub(context, category: 'Value Addition'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 15),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _openLearningHub(context),
+            icon: const Icon(Icons.menu_book_outlined),
+            label: const Text('Explore all articles'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: forest,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              side: const BorderSide(color: border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildRecentActivity(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +573,7 @@ class HomeScreen extends StatelessWidget {
         const SizedBox(height: 9),
         const Center(
           child: Text(
-            'Sample assessments — not actual CNN predictions',
+            'Sample assessments - not actual CNN predictions',
             textAlign: TextAlign.center,
             style: TextStyle(color: muted, fontSize: 11),
           ),
@@ -447,6 +611,10 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
+
+// =====================================================
+// QUICK ACTION CARD
+// =====================================================
 
 class _QuickActionCard extends StatelessWidget {
   final IconData icon;
@@ -515,6 +683,99 @@ class _QuickActionCard extends StatelessWidget {
     );
   }
 }
+
+// =====================================================
+// LEARNING CATEGORY CARD WITH LOCAL IMAGE
+// =====================================================
+
+class _LearningCategoryCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String imagePath;
+  final IconData icon;
+  final Color background;
+  final VoidCallback onTap;
+
+  const _LearningCategoryCard({
+    required this.title,
+    required this.subtitle,
+    required this.imagePath,
+    required this.icon,
+    required this.background,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(19),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(19),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: AppTheme.border),
+            borderRadius: BorderRadius.circular(19),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
+                ),
+                child: Image.asset(
+                  imagePath,
+                  height: 112,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 112,
+                      color: background,
+                      alignment: Alignment.center,
+                      child: Icon(icon, size: 43, color: AppTheme.forest),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppTheme.forest,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 11,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================
+// RECENT ASSESSMENT TILE
+// =====================================================
 
 class FoodAssessmentTile extends StatelessWidget {
   final String name;
