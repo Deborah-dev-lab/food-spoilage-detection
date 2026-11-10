@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../database/database_helper.dart';
 import '../../theme/app_theme.dart';
 
 class AddProduceScreen extends StatefulWidget {
@@ -11,39 +12,34 @@ class AddProduceScreen extends StatefulWidget {
 
 class _AddProduceScreenState extends State<AddProduceScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _quantityController = TextEditingController();
-  final _notesController = TextEditingController();
+  final _name = TextEditingController();
+  final _quantity = TextEditingController();
+  final _notes = TextEditingController();
 
   String _category = 'Fruit';
   String _unit = 'kg';
   DateTime? _purchaseDate;
-
-  static const forest = AppTheme.forest;
-  static const muted = AppTheme.muted;
-  static const sage = AppTheme.sage;
+  bool _saving = false;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _quantityController.dispose();
-    _notesController.dispose();
+    _name.dispose();
+    _quantity.dispose();
+    _notes.dispose();
     super.dispose();
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/'
-        '${date.month.toString().padLeft(2, '0')}/'
-        '${date.year}';
-  }
+  String _date(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/'
+      '${date.year}';
 
   InputDecoration _decoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: muted),
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: AppTheme.border),
@@ -54,18 +50,18 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: forest, width: 1.5),
+        borderSide: const BorderSide(color: AppTheme.forest, width: 1.5),
       ),
     );
   }
 
-  Widget _fieldLabel(String label) {
+  Widget _label(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 9),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Text(
-        label,
+        text,
         style: const TextStyle(
-          color: forest,
+          color: AppTheme.forest,
           fontSize: 13,
           fontWeight: FontWeight.w800,
         ),
@@ -74,63 +70,72 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
   }
 
   Future<void> _selectDate() async {
-    final today = DateTime.now();
+    final now = DateTime.now();
 
-    final selected = await showDatePicker(
+    final chosen = await showDatePicker(
       context: context,
-      initialDate: _purchaseDate ?? today,
+      initialDate: _purchaseDate ?? now,
       firstDate: DateTime(2020),
-      lastDate: today,
+      lastDate: now,
       helpText: 'Select stock purchase date',
     );
 
-    if (selected != null && mounted) {
-      setState(() => _purchaseDate = selected);
+    if (chosen != null && mounted) {
+      setState(() => _purchaseDate = chosen);
     }
   }
 
-  void _previewEntry() {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _reviewAndSave() async {
+    if (_saving || !_formKey.currentState!.validate()) {
+      return;
+    }
 
-    final name = _nameController.text.trim();
-    final quantity = _quantityController.text.trim();
+    final name = _name.text.trim();
+    final quantity = double.parse(_quantity.text.trim());
 
-    showModalBottomSheet<void>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
               24,
               24,
               24,
-              MediaQuery.of(sheetContext).viewInsets.bottom + 25,
+              24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.inventory_2_outlined, color: forest, size: 36),
+                const Icon(
+                  Icons.inventory_2_outlined,
+                  color: AppTheme.forest,
+                  size: 36,
+                ),
                 const SizedBox(height: 14),
                 const Text(
-                  'Stock entry preview',
+                  'Review stock entry',
                   style: TextStyle(
-                    color: forest,
+                    color: AppTheme.forest,
                     fontSize: 23,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 9),
+                const SizedBox(height: 10),
                 const Text(
-                  'Review your information below. '
-                  'This is a prototype preview and '
-                  'has not been saved.',
-                  style: TextStyle(color: muted, fontSize: 13, height: 1.5),
+                  'Confirm your stock details before saving '
+                  'them to your local inventory.',
+                  style: TextStyle(
+                    color: AppTheme.muted,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 22),
                 _previewRow('Produce', name),
@@ -140,29 +145,31 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   'Purchase date',
                   _purchaseDate == null
                       ? 'Not provided'
-                      : _formatDate(_purchaseDate!),
+                      : _date(_purchaseDate!),
                 ),
-                if (_notesController.text.trim().isNotEmpty)
-                  _previewRow('Notes', _notesController.text.trim()),
-                const SizedBox(height: 24),
+                _previewRow('Condition', 'Not assessed'),
+                if (_notes.text.trim().isNotEmpty)
+                  _previewRow('Notes', _notes.text.trim()),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                    },
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(sheetContext, true),
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Save to inventory'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: forest,
+                      backgroundColor: AppTheme.forest,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
                     ),
-                    child: const Text(
-                      'Continue editing',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(sheetContext, false),
+                    child: const Text('Continue editing'),
                   ),
                 ),
               ],
@@ -171,6 +178,39 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
         );
       },
     );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _saving = true);
+
+    try {
+      await DatabaseHelper.instance.insertInventory({
+        'produce_name': name,
+        'category': _category,
+        'quantity': quantity,
+        'unit': _unit,
+        'freshness_status': 'unassessed',
+        'date_added': DateTime.now().toIso8601String(),
+        'purchase_date': _purchaseDate?.toIso8601String(),
+        'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+      });
+
+      if (!mounted) return;
+
+      // Return true so VendorInventoryScreen knows
+      // that a new record was successfully saved.
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save stock: $error')));
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 
   Widget _previewRow(String label, String value) {
@@ -180,17 +220,17 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 105,
+            width: 110,
             child: Text(
               label,
-              style: const TextStyle(color: muted, fontSize: 12),
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
             ),
           ),
           Expanded(
             child: Text(
               value,
               style: const TextStyle(
-                color: forest,
+                color: AppTheme.forest,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -206,17 +246,10 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
     return Scaffold(
       backgroundColor: AppTheme.ivory,
       appBar: AppBar(
+        title: const Text('Add produce'),
         backgroundColor: AppTheme.ivory,
-        foregroundColor: forest,
+        foregroundColor: AppTheme.forest,
         elevation: 0,
-        title: const Text(
-          'Add produce',
-          style: TextStyle(
-            color: forest,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
       ),
       body: SafeArea(
         child: Form(
@@ -227,7 +260,7 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
               const Text(
                 'NEW STOCK ENTRY',
                 style: TextStyle(
-                  color: muted,
+                  color: AppTheme.muted,
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.5,
@@ -237,25 +270,29 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
               const Text(
                 'What are you\nadding today?',
                 style: TextStyle(
-                  color: forest,
+                  color: AppTheme.forest,
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
                   height: 1.15,
                 ),
               ),
-              const SizedBox(height: 11),
+              const SizedBox(height: 12),
               const Text(
                 'Record your fruits and vegetables '
                 'to organise your vendor inventory.',
-                style: TextStyle(color: muted, fontSize: 13, height: 1.6),
+                style: TextStyle(
+                  color: AppTheme.muted,
+                  fontSize: 13,
+                  height: 1.6,
+                ),
               ),
               const SizedBox(height: 28),
 
-              _fieldLabel('Produce name *'),
+              _label('Produce name *'),
               TextFormField(
-                controller: _nameController,
-                textCapitalization: TextCapitalization.words,
+                controller: _name,
                 maxLength: 60,
+                textCapitalization: TextCapitalization.words,
                 decoration: _decoration('e.g. Tomatoes, Bananas, Mangoes'),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -264,9 +301,9 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 15),
 
-              _fieldLabel('Produce category'),
+              const SizedBox(height: 14),
+              _label('Produce category'),
               DropdownButtonFormField<String>(
                 initialValue: _category,
                 decoration: _decoration('Select category'),
@@ -283,26 +320,24 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   }
                 },
               ),
-              const SizedBox(height: 23),
 
-              _fieldLabel('Quantity *'),
+              const SizedBox(height: 22),
+              _label('Quantity *'),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     flex: 2,
                     child: TextFormField(
-                      controller: _quantityController,
+                      controller: _quantity,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
                       decoration: _decoration('e.g. 15'),
                       validator: (value) {
-                        final quantity = double.tryParse(value?.trim() ?? '');
+                        final number = double.tryParse(value?.trim() ?? '');
 
-                        if (quantity == null ||
-                            !quantity.isFinite ||
-                            quantity <= 0) {
+                        if (number == null || !number.isFinite || number <= 0) {
                           return 'Enter a valid quantity.';
                         }
 
@@ -340,9 +375,9 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 23),
 
-              _fieldLabel('Purchase date (optional)'),
+              const SizedBox(height: 22),
+              _label('Purchase date (optional)'),
               InkWell(
                 onTap: _selectDate,
                 borderRadius: BorderRadius.circular(16),
@@ -358,15 +393,20 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_month_outlined, color: forest),
+                      const Icon(
+                        Icons.calendar_month_outlined,
+                        color: AppTheme.forest,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           _purchaseDate == null
                               ? 'Select purchase date'
-                              : _formatDate(_purchaseDate!),
+                              : _date(_purchaseDate!),
                           style: TextStyle(
-                            color: _purchaseDate == null ? muted : forest,
+                            color: _purchaseDate == null
+                                ? AppTheme.muted
+                                : AppTheme.forest,
                             fontSize: 13,
                           ),
                         ),
@@ -379,7 +419,7 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                           },
                           icon: const Icon(
                             Icons.close_rounded,
-                            color: muted,
+                            color: AppTheme.muted,
                             size: 18,
                           ),
                         ),
@@ -387,39 +427,37 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
 
-              _fieldLabel('Additional notes (optional)'),
+              const SizedBox(height: 24),
+              _label('Additional notes (optional)'),
               TextFormField(
-                controller: _notesController,
+                controller: _notes,
                 minLines: 3,
                 maxLines: 5,
                 maxLength: 300,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: _decoration(
-                  'e.g. Purchased from local supplier this morning',
-                ),
+                decoration: _decoration('e.g. Purchased from local supplier'),
               ),
-              const SizedBox(height: 15),
 
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: sage,
+                  color: AppTheme.sage,
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline_rounded, color: forest),
+                    Icon(Icons.info_outline_rounded, color: AppTheme.forest),
                     SizedBox(width: 11),
                     Expanded(
                       child: Text(
-                        'Stock entries are not yet stored. '
-                        'We will connect this form to the '
-                        'local inventory database in a later phase.',
+                        'New stock is marked Not assessed until '
+                        'its condition is recorded. Entries are '
+                        'stored locally on this device.',
                         style: TextStyle(
-                          color: forest,
+                          color: AppTheme.forest,
                           fontSize: 12,
                           height: 1.6,
                         ),
@@ -428,23 +466,32 @@ class _AddProduceScreenState extends State<AddProduceScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
 
+              const SizedBox(height: 24),
               SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
-                  onPressed: _previewEntry,
+                  onPressed: _saving ? null : _reviewAndSave,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: forest,
+                    backgroundColor: AppTheme.forest,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(17),
                     ),
                   ),
-                  icon: const Icon(Icons.visibility_outlined),
-                  label: const Text(
-                    'Review stock entry',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text(
+                    _saving ? 'Saving...' : 'Review and save stock',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ),

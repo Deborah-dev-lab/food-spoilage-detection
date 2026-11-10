@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../database/database_helper.dart';
 import '../theme/app_theme.dart';
 
 enum FeedbackChoice { helpful, notHelpful }
@@ -9,16 +10,26 @@ enum PredictionAccuracy { correct, partiallyCorrect, incorrect }
 enum ActualCondition { fresh, spoiling, spoiled, unsure }
 
 class FeedbackScreen extends StatefulWidget {
+  final int? assessmentId;
   final String? produceName;
   final String? assessmentStatus;
 
-  const FeedbackScreen({super.key, this.produceName, this.assessmentStatus});
+  const FeedbackScreen({
+    super.key,
+    this.assessmentId,
+    this.produceName,
+    this.assessmentStatus,
+  });
 
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
+  static const Color forest = AppTheme.forest;
+  static const Color muted = AppTheme.muted;
+  static const Color sage = AppTheme.sage;
+
   final TextEditingController _commentController = TextEditingController();
 
   final TextEditingController _actualProduceController =
@@ -28,40 +39,19 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   FeedbackChoice? _selectedChoice;
   ActualCondition? _actualCondition;
 
+  Map<String, dynamic>? _assessment;
+
+  bool _loading = true;
+  bool _saving = false;
   bool _submitted = false;
+  bool _alreadySubmitted = false;
+  String? _loadError;
 
-  static const Color forest = AppTheme.forest;
-  static const Color muted = AppTheme.muted;
-  static const Color sage = AppTheme.sage;
-
-  String get _predictedProduce {
-    final value = widget.produceName?.trim();
-
-    if (value == null || value.isEmpty) {
-      return 'Not specified';
-    }
-
-    return value
-        .replaceAll(RegExp(r'[_-]+'), ' ')
-        .replaceAllMapped(
-          RegExp(r'([a-z])([A-Z])'),
-          (match) => '${match.group(1)} ${match.group(2)}',
-        );
+  @override
+  void initState() {
+    super.initState();
+    _loadAssessment();
   }
-
-  String get _predictedCondition {
-    final value = widget.assessmentStatus?.trim();
-
-    if (value == null || value.isEmpty) {
-      return 'Not specified';
-    }
-
-    return value;
-  }
-
-  bool get _showCorrections =>
-      _predictionAccuracy == PredictionAccuracy.incorrect ||
-      _predictionAccuracy == PredictionAccuracy.partiallyCorrect;
 
   @override
   void dispose() {
@@ -70,7 +60,141 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     super.dispose();
   }
 
-  void _submitFeedback() {
+  String _displayProduce(String? value) {
+    final text = value?.trim();
+
+    if (text == null || text.isEmpty) {
+      return 'Not specified';
+    }
+
+    return text
+        .replaceAll(RegExp(r'[_-]+'), ' ')
+        .replaceAllMapped(
+          RegExp(r'([a-z])([A-Z])'),
+          (match) => '${match.group(1)} ${match.group(2)}',
+        );
+  }
+
+  String get _predictedProduce {
+    return _displayProduce(
+      _assessment?['produce_name']?.toString() ?? widget.produceName,
+    );
+  }
+
+  String get _predictedCondition {
+    final value =
+        _assessment?['freshness_status']?.toString() ?? widget.assessmentStatus;
+
+    if (value == null || value.trim().isEmpty) {
+      return 'Not specified';
+    }
+
+    return value.trim();
+  }
+
+  bool get _showCorrections {
+    return _predictionAccuracy == PredictionAccuracy.incorrect ||
+        _predictionAccuracy == PredictionAccuracy.partiallyCorrect;
+  }
+
+  bool get _canSubmit {
+    return !_loading &&
+        !_saving &&
+        !_submitted &&
+        !_alreadySubmitted &&
+        _loadError == null &&
+        _assessment != null &&
+        widget.assessmentId != null;
+  }
+
+  Future<void> _loadAssessment() async {
+    if (!mounted) return;
+
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+
+    final id = widget.assessmentId;
+
+    if (id == null) {
+      setState(() {
+        _loading = false;
+        _loadError =
+            'This screen was opened without a saved '
+            'assessment ID. Please open feedback from '
+            'a saved assessment.';
+      });
+      return;
+    }
+
+    try {
+      final assessment = await DatabaseHelper.instance.getAssessmentById(id);
+
+      if (assessment == null) {
+        if (!mounted) return;
+
+        setState(() {
+          _loading = false;
+          _loadError =
+              'This assessment could not be found in '
+              'your local history.';
+        });
+        return;
+      }
+
+      final existing = await DatabaseHelper.instance.hasFeedbackForAssessment(
+        id,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _assessment = assessment;
+        _alreadySubmitted = existing;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _loadError =
+            'Unable to load this assessment. '
+            'Please try again.';
+      });
+    }
+  }
+
+  String _accuracyValue(PredictionAccuracy accuracy) {
+    switch (accuracy) {
+      case PredictionAccuracy.correct:
+        return 'correct';
+      case PredictionAccuracy.partiallyCorrect:
+        return 'partially_correct';
+      case PredictionAccuracy.incorrect:
+        return 'incorrect';
+    }
+  }
+
+  String? _actualConditionValue() {
+    switch (_actualCondition) {
+      case ActualCondition.fresh:
+        return 'fresh';
+      case ActualCondition.spoiling:
+        return 'spoiling';
+      case ActualCondition.spoiled:
+        return 'spoiled';
+      case ActualCondition.unsure:
+        return 'unsure';
+      case null:
+        return null;
+    }
+  }
+
+  Future<void> _submitFeedback() async {
+    if (!_canSubmit) return;
+
     FocusScope.of(context).unfocus();
 
     if (_predictionAccuracy == null) {
@@ -83,30 +207,91 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       return;
     }
 
-    // UI prototype:
-    // The feedback is not yet saved to a local database
-    // or submitted to a remote server.
-    //
-    // Database integration will be added later.
-    //
-    // Planned fields:
-    // predictedProduce
-    // predictedCondition
-    // predictionAccuracy
-    // actualProduce
-    // actualCondition
-    // helpful
-    // comments
-    // createdAt
+    final id = widget.assessmentId!;
 
     setState(() {
-      _submitted = true;
+      _saving = true;
     });
+
+    try {
+      final existing = await DatabaseHelper.instance.hasFeedbackForAssessment(
+        id,
+      );
+
+      if (existing) {
+        if (!mounted) return;
+
+        setState(() {
+          _saving = false;
+          _alreadySubmitted = true;
+        });
+        return;
+      }
+
+      final accuracy = _predictionAccuracy!;
+      final isCorrect = accuracy == PredictionAccuracy.correct ? 1 : 0;
+
+      final actualProduce = _showCorrections
+          ? _actualProduceController.text.trim()
+          : '';
+
+      final actualCondition = _showCorrections ? _actualConditionValue() : null;
+
+      final comments = _commentController.text.trim();
+
+      await DatabaseHelper.instance.insertFeedback({
+        'assessment_id': id,
+        'is_correct': isCorrect,
+        'prediction_accuracy': _accuracyValue(accuracy),
+        'actual_produce': actualProduce.isEmpty ? null : actualProduce,
+        'actual_condition': actualCondition,
+        'is_helpful': _selectedChoice == FeedbackChoice.helpful ? 1 : 0,
+        'comments': comments.isEmpty ? null : comments,
+        'submitted_at': DateTime.now().toIso8601String(),
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        _saving = false;
+        _submitted = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _saving = false;
+      });
+
+      _showMessage('Could not save feedback. Please try again.');
+    }
   }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  InputDecoration _inputDecoration({required String hint}) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: muted, fontSize: 13),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.all(17),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(17),
+        borderSide: const BorderSide(color: AppTheme.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(17),
+        borderSide: const BorderSide(color: AppTheme.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(17),
+        borderSide: const BorderSide(color: forest, width: 1.5),
+      ),
     );
   }
 
@@ -168,10 +353,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             label: 'Predicted condition',
             value: _predictedCondition,
           ),
+          const SizedBox(height: 14),
+          _FeedbackDetailRow(
+            label: 'Assessment ID',
+            value: widget.assessmentId?.toString() ?? '—',
+          ),
           const SizedBox(height: 15),
           const Text(
-            'These details come from the assessment '
-            'you are reviewing.',
+            'These details come from the saved '
+            'assessment you are reviewing.',
             style: TextStyle(color: muted, fontSize: 11, height: 1.5),
           ),
         ],
@@ -228,6 +418,32 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           },
         ),
       ],
+    );
+  }
+
+  Widget _conditionChip({
+    required String label,
+    required ActualCondition value,
+  }) {
+    final selected = _actualCondition == value;
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) {
+        setState(() {
+          _actualCondition = value;
+        });
+      },
+      selectedColor: sage,
+      backgroundColor: AppTheme.ivory,
+      side: BorderSide(color: selected ? forest : AppTheme.border),
+      labelStyle: TextStyle(
+        color: forest,
+        fontSize: 12,
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
     );
   }
 
@@ -308,32 +524,6 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 
-  Widget _conditionChip({
-    required String label,
-    required ActualCondition value,
-  }) {
-    final selected = _actualCondition == value;
-
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) {
-        setState(() {
-          _actualCondition = value;
-        });
-      },
-      selectedColor: sage,
-      backgroundColor: AppTheme.ivory,
-      side: BorderSide(color: selected ? forest : AppTheme.border),
-      labelStyle: TextStyle(
-        color: forest,
-        fontSize: 12,
-        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-    );
-  }
-
   Widget _buildHelpfulnessSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,29 +597,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 
-  InputDecoration _inputDecoration({required String hint}) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: muted, fontSize: 13),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.all(17),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(17),
-        borderSide: const BorderSide(color: AppTheme.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(17),
-        borderSide: const BorderSide(color: AppTheme.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(17),
-        borderSide: const BorderSide(color: forest, width: 1.5),
-      ),
-    );
-  }
-
-  Widget _buildPrototypeNotice() {
+  Widget _buildStorageNotice() {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -439,15 +607,16 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, color: forest, size: 23),
+          Icon(Icons.storage_rounded, color: forest, size: 23),
           SizedBox(width: 11),
           Expanded(
             child: Text(
-              'Feedback collection is currently in '
-              'prototype mode. Your responses are '
-              'not yet saved or transmitted. '
-              'Local storage will be connected '
-              'during database integration.',
+              'Your feedback will be saved locally '
+              'on this device using SQLite. '
+              'It is linked to the selected assessment '
+              'and does not require an internet connection. '
+              'Submitting feedback does not automatically '
+              'retrain the CNN model.',
               style: TextStyle(color: forest, fontSize: 12, height: 1.6),
             ),
           ),
@@ -500,36 +669,52 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         const SizedBox(height: 27),
         _buildCommentsSection(),
         const SizedBox(height: 18),
-        _buildPrototypeNotice(),
+        _buildStorageNotice(),
         const SizedBox(height: 25),
         SizedBox(
           height: 57,
           child: ElevatedButton.icon(
-            onPressed: _submitFeedback,
+            onPressed: _canSubmit ? _submitFeedback : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: forest,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: forest.withValues(alpha: 0.4),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(17),
               ),
             ),
-            icon: const Icon(Icons.send_rounded),
-            label: const Text(
-              'Submit feedback',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+            icon: _saving
+                ? const SizedBox(
+                    width: 19,
+                    height: 19,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.send_rounded),
+            label: Text(
+              _saving ? 'Saving feedback...' : 'Submit feedback',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
             ),
           ),
         ),
         const SizedBox(height: 10),
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Maybe later'),
         ),
       ],
     );
   }
 
-  Widget _buildSuccessScreen() {
+  Widget _buildStatusScreen({
+    required IconData icon,
+    required String title,
+    required String message,
+    required String buttonLabel,
+    VoidCallback? onButtonPressed,
+  }) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(27),
@@ -543,39 +728,31 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 color: sage,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.check_circle_outline_rounded,
-                color: forest,
-                size: 52,
-              ),
+              child: Icon(icon, color: forest, size: 52),
             ),
             const SizedBox(height: 26),
-            const Text(
-              'Thank you for\nsharing!',
+            Text(
+              title,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: forest,
-                fontSize: 32,
+                fontSize: 30,
                 fontWeight: FontWeight.w800,
                 height: 1.15,
-                letterSpacing: -0.8,
               ),
             ),
             const SizedBox(height: 15),
-            const Text(
-              'Your feedback was captured for '
-              'this preview session.\n\n'
-              'Permanent storage will be added '
-              'when we integrate the FreshTrack database.',
+            Text(
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: muted, fontSize: 13, height: 1.7),
+              style: const TextStyle(color: muted, fontSize: 13, height: 1.7),
             ),
             const SizedBox(height: 30),
             SizedBox(
               width: double.infinity,
               height: 57,
               child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context),
+                onPressed: onButtonPressed ?? () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: forest,
                   foregroundColor: Colors.white,
@@ -584,9 +761,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   ),
                 ),
                 icon: const Icon(Icons.arrow_back_rounded),
-                label: const Text(
-                  'Back to assessment',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                label: Text(
+                  buttonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
             ),
@@ -598,6 +775,42 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Widget body;
+
+    if (_loading) {
+      body = const Center(child: CircularProgressIndicator(color: forest));
+    } else if (_submitted) {
+      body = _buildStatusScreen(
+        icon: Icons.check_circle_outline_rounded,
+        title: 'Thank you for\nsharing!',
+        message:
+            'Your feedback has been saved successfully '
+            'to the FreshTrack database on this device.\n\n'
+            'It is linked to assessment '
+            '#${widget.assessmentId}.',
+        buttonLabel: 'Back to assessment',
+      );
+    } else if (_alreadySubmitted) {
+      body = _buildStatusScreen(
+        icon: Icons.verified_outlined,
+        title: 'Feedback already\nsubmitted',
+        message:
+            'Feedback has already been recorded for '
+            'this assessment. No additional response '
+            'has been saved.',
+        buttonLabel: 'Go back',
+      );
+    } else if (_loadError != null) {
+      body = _buildStatusScreen(
+        icon: Icons.info_outline_rounded,
+        title: 'Assessment\nunavailable',
+        message: _loadError!,
+        buttonLabel: 'Go back',
+      );
+    } else {
+      body = _buildFeedbackForm();
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.ivory,
       resizeToAvoidBottomInset: true,
@@ -615,9 +828,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ),
         ),
       ),
-      body: SafeArea(
-        child: _submitted ? _buildSuccessScreen() : _buildFeedbackForm(),
-      ),
+      body: SafeArea(child: body),
     );
   }
 }

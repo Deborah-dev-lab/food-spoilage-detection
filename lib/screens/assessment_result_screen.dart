@@ -2,13 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../services/assessment_storage.dart';
 import '../theme/app_theme.dart';
 import 'camera_screen.dart';
 import 'feedback_screen.dart';
-
-// =====================================================
-// ASSESSMENT DATA MODEL
-// =====================================================
 
 enum FreshnessStatus { fresh, spoiling, spoiled, uncertain }
 
@@ -26,11 +23,7 @@ class AssessmentResult {
   });
 }
 
-// =====================================================
-// ASSESSMENT RESULT SCREEN
-// =====================================================
-
-class AssessmentResultScreen extends StatelessWidget {
+class AssessmentResultScreen extends StatefulWidget {
   final String imagePath;
   final AssessmentResult result;
 
@@ -40,10 +33,11 @@ class AssessmentResultScreen extends StatelessWidget {
     required this.result,
   });
 
-  // =====================================================
-  // COLOURS
-  // =====================================================
+  @override
+  State<AssessmentResultScreen> createState() => _AssessmentResultScreenState();
+}
 
+class _AssessmentResultScreenState extends State<AssessmentResultScreen> {
   static const Color forest = AppTheme.forest;
   static const Color ivory = Color(0xFFF7F8F4);
   static const Color sage = Color(0xFFDCE9D6);
@@ -54,12 +48,59 @@ class AssessmentResultScreen extends StatelessWidget {
   static const Color spoiledRed = Color(0xFFA34439);
   static const Color uncertainBlue = Color(0xFF586B7D);
 
-  // =====================================================
-  // FORMAT PRODUCE NAME
-  // =====================================================
+  bool _isSaving = false;
+  bool _isSaved = false;
+  String? _saveError;
+  int? _savedAssessmentId;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (!widget.result.isDemo) {
+      _saveAssessment();
+    }
+  }
+
+  Future<void> _saveAssessment() async {
+    if (_isSaving || _isSaved || widget.result.isDemo) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+
+    try {
+      final assessmentId = await AssessmentStorage.saveAssessment(
+        produceName: widget.result.produceName,
+        freshnessStatus: widget.result.status.name,
+        confidence: widget.result.confidence,
+        imagePath: widget.imagePath,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedAssessmentId = assessmentId;
+        _isSaved = true;
+        _isSaving = false;
+      });
+    } catch (error) {
+      debugPrint('Failed to save assessment: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+        _saveError = 'Could not save this assessment to local history.';
+      });
+    }
+  }
 
   String get formattedProduceName {
-    String name = result.produceName.trim();
+    String name = widget.result.produceName.trim();
 
     name = name.replaceAll('_', ' ');
     name = name.replaceAll('-', ' ');
@@ -74,9 +115,7 @@ class AssessmentResultScreen extends StatelessWidget {
       (match) => '${match.group(1)} ${match.group(2)}',
     );
 
-    if (name.isEmpty) {
-      return 'Unknown produce';
-    }
+    if (name.isEmpty) return 'Unknown produce';
 
     return name
         .split(RegExp(r'\s+'))
@@ -89,40 +128,30 @@ class AssessmentResultScreen extends StatelessWidget {
         .join(' ');
   }
 
-  // =====================================================
-  // RESULT INFORMATION
-  // =====================================================
-
   String get statusTitle {
-    switch (result.status) {
+    switch (widget.result.status) {
       case FreshnessStatus.fresh:
         return 'Appears fresh';
-
       case FreshnessStatus.spoiling:
         return 'Possible spoilage';
-
       case FreshnessStatus.spoiled:
         return 'Likely spoiled';
-
       case FreshnessStatus.uncertain:
         return 'Result uncertain';
     }
   }
 
   String get statusSubtitle {
-    switch (result.status) {
+    switch (widget.result.status) {
       case FreshnessStatus.fresh:
         return 'The model identified visual patterns '
             'associated with fresh produce.';
-
       case FreshnessStatus.spoiling:
         return 'The image may contain early signs '
             'of deterioration.';
-
       case FreshnessStatus.spoiled:
         return 'The model identified visual patterns '
             'associated with spoiled produce.';
-
       case FreshnessStatus.uncertain:
         return 'The model could not determine the '
             'produce condition with sufficient certainty.';
@@ -130,75 +159,50 @@ class AssessmentResultScreen extends StatelessWidget {
   }
 
   String get statusLabel {
-    switch (result.status) {
-      case FreshnessStatus.fresh:
-        return 'FRESH';
-
-      case FreshnessStatus.spoiling:
-        return 'SPOILING';
-
-      case FreshnessStatus.spoiled:
-        return 'SPOILED';
-
-      case FreshnessStatus.uncertain:
-        return 'UNCERTAIN';
-    }
+    return widget.result.status.name.toUpperCase();
   }
 
   Color get statusColor {
-    switch (result.status) {
+    switch (widget.result.status) {
       case FreshnessStatus.fresh:
         return freshGreen;
-
       case FreshnessStatus.spoiling:
         return warningOrange;
-
       case FreshnessStatus.spoiled:
         return spoiledRed;
-
       case FreshnessStatus.uncertain:
         return uncertainBlue;
     }
   }
 
   Color get statusBackground {
-    switch (result.status) {
+    switch (widget.result.status) {
       case FreshnessStatus.fresh:
         return const Color(0xFFE6F2E4);
-
       case FreshnessStatus.spoiling:
         return const Color(0xFFFFF0D8);
-
       case FreshnessStatus.spoiled:
         return const Color(0xFFFBE5E2);
-
       case FreshnessStatus.uncertain:
         return const Color(0xFFE8EDF2);
     }
   }
 
   IconData get statusIcon {
-    switch (result.status) {
+    switch (widget.result.status) {
       case FreshnessStatus.fresh:
         return Icons.check_circle_rounded;
-
       case FreshnessStatus.spoiling:
         return Icons.info_rounded;
-
       case FreshnessStatus.spoiled:
         return Icons.warning_amber_rounded;
-
       case FreshnessStatus.uncertain:
         return Icons.help_rounded;
     }
   }
 
-  // =====================================================
-  // RECOMMENDATIONS
-  // =====================================================
-
   List<String> get recommendations {
-    switch (result.status) {
+    switch (widget.result.status) {
       case FreshnessStatus.fresh:
         return [
           'Check for unusual odours, mould, or soft spots before use.',
@@ -229,10 +233,6 @@ class AssessmentResultScreen extends StatelessWidget {
     }
   }
 
-  // =====================================================
-  // NAVIGATION
-  // =====================================================
-
   void _scanAnotherItem(BuildContext context) {
     Navigator.pushAndRemoveUntil(
       context,
@@ -242,20 +242,100 @@ class AssessmentResultScreen extends StatelessWidget {
   }
 
   void _openFeedback(BuildContext context) {
+    if (widget.result.isDemo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Feedback is available for real assessments, '
+            'not demo previews.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final assessmentId = _savedAssessmentId;
+
+    if (assessmentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _saveError ??
+                'Please wait until the assessment '
+                    'is saved before giving feedback.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => FeedbackScreen(
+          assessmentId: assessmentId,
           produceName: formattedProduceName,
-          assessmentStatus: statusTitle,
+          assessmentStatus: widget.result.status.name,
         ),
       ),
     );
   }
 
-  // =====================================================
-  // IMAGE PREVIEW
-  // =====================================================
+  Widget _buildSaveStatus() {
+    final hasError = _saveError != null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+      decoration: BoxDecoration(
+        color: hasError ? const Color(0xFFFFF0D8) : AppTheme.sage,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        children: [
+          if (_isSaving)
+            const SizedBox(
+              width: 19,
+              height: 19,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.forest,
+              ),
+            )
+          else
+            Icon(
+              hasError
+                  ? Icons.error_outline_rounded
+                  : _isSaved
+                  ? Icons.check_circle_rounded
+                  : Icons.info_outline_rounded,
+              color: hasError ? const Color(0xFF94631B) : AppTheme.forest,
+              size: 21,
+            ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              _isSaving
+                  ? 'Saving assessment locally...'
+                  : hasError
+                  ? _saveError!
+                  : _isSaved
+                  ? 'Assessment saved to local history'
+                  : 'Preparing assessment record...',
+              style: const TextStyle(
+                color: AppTheme.forest,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (hasError && !_isSaving)
+            TextButton(onPressed: _saveAssessment, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
 
   Widget _buildImagePreview() {
     return Container(
@@ -273,7 +353,7 @@ class AssessmentResultScreen extends StatelessWidget {
               height: 245,
               width: double.infinity,
               child: Image.file(
-                File(imagePath),
+                File(widget.imagePath),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
@@ -289,7 +369,6 @@ class AssessmentResultScreen extends StatelessWidget {
                 },
               ),
             ),
-
             Positioned(
               left: 13,
               bottom: 13,
@@ -325,12 +404,8 @@ class AssessmentResultScreen extends StatelessWidget {
     );
   }
 
-  // =====================================================
-  // MAIN RESULT CARD
-  // =====================================================
-
   Widget _buildResultCard() {
-    final rawScore = result.confidence;
+    final rawScore = widget.result.confidence;
 
     final double? score = rawScore != null && rawScore.isFinite
         ? rawScore.clamp(0.0, 1.0).toDouble()
@@ -356,9 +431,7 @@ class AssessmentResultScreen extends StatelessWidget {
                 ),
                 child: Icon(statusIcon, color: statusColor, size: 28),
               ),
-
               const SizedBox(width: 12),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,7 +447,7 @@ class AssessmentResultScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      result.isDemo
+                      widget.result.isDemo
                           ? 'Simulated result'
                           : 'Image analysis complete',
                       style: const TextStyle(color: muted, fontSize: 12),
@@ -382,8 +455,7 @@ class AssessmentResultScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
-              if (result.isDemo)
+              if (widget.result.isDemo)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -404,9 +476,7 @@ class AssessmentResultScreen extends StatelessWidget {
                 ),
             ],
           ),
-
           const SizedBox(height: 22),
-
           Text(
             statusTitle,
             style: const TextStyle(
@@ -416,9 +486,7 @@ class AssessmentResultScreen extends StatelessWidget {
               letterSpacing: -0.8,
             ),
           ),
-
           const SizedBox(height: 9),
-
           Text(
             statusSubtitle,
             style: const TextStyle(
@@ -427,9 +495,7 @@ class AssessmentResultScreen extends StatelessWidget {
               height: 1.6,
             ),
           ),
-
           const SizedBox(height: 21),
-
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
             decoration: BoxDecoration(
@@ -454,14 +520,10 @@ class AssessmentResultScreen extends StatelessWidget {
               ],
             ),
           ),
-
           if (score != null) ...[
             const SizedBox(height: 22),
-
             Divider(color: statusColor.withValues(alpha: 0.17)),
-
             const SizedBox(height: 15),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -483,9 +545,7 @@ class AssessmentResultScreen extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 12),
-
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: LinearProgressIndicator(
@@ -495,9 +555,7 @@ class AssessmentResultScreen extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(statusColor),
               ),
             ),
-
             const SizedBox(height: 12),
-
             const Text(
               'This is the model output score for its '
               'selected class, not a verified measure '
@@ -510,10 +568,6 @@ class AssessmentResultScreen extends StatelessWidget {
     );
   }
 
-  // =====================================================
-  // INFORMATION CARDS
-  // =====================================================
-
   Widget _buildInformationCards() {
     return Row(
       children: [
@@ -524,9 +578,7 @@ class AssessmentResultScreen extends StatelessWidget {
             value: formattedProduceName,
           ),
         ),
-
         const SizedBox(width: 12),
-
         Expanded(
           child: _InfoCard(
             icon: Icons.center_focus_strong_rounded,
@@ -537,10 +589,6 @@ class AssessmentResultScreen extends StatelessWidget {
       ],
     );
   }
-
-  // =====================================================
-  // RECOMMENDATIONS
-  // =====================================================
 
   Widget _buildRecommendations() {
     return _SectionCard(
@@ -574,9 +622,7 @@ class AssessmentResultScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 12),
-
                 Expanded(
                   child: Text(
                     recommendations[index],
@@ -595,10 +641,6 @@ class AssessmentResultScreen extends StatelessWidget {
     );
   }
 
-  // =====================================================
-  // FOOD SAFETY NOTICE
-  // =====================================================
-
   Widget _buildSafetyNotice() {
     return Container(
       padding: const EdgeInsets.all(19),
@@ -610,9 +652,7 @@ class AssessmentResultScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.shield_outlined, color: Color(0xFF94631B), size: 24),
-
           SizedBox(width: 12),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,9 +665,7 @@ class AssessmentResultScreen extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-
                 SizedBox(height: 8),
-
                 Text(
                   'FreshTrack assesses visible appearance. '
                   'A photograph cannot detect every harmful '
@@ -647,10 +685,6 @@ class AssessmentResultScreen extends StatelessWidget {
       ),
     );
   }
-
-  // =====================================================
-  // FEEDBACK CARD
-  // =====================================================
 
   Widget _buildFeedbackCard(BuildContext context) {
     return Container(
@@ -675,9 +709,7 @@ class AssessmentResultScreen extends StatelessWidget {
               size: 26,
             ),
           ),
-
           const SizedBox(width: 14),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,16 +722,12 @@ class AssessmentResultScreen extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-
                 const SizedBox(height: 5),
-
                 const Text(
                   'Tell us how we did.',
                   style: TextStyle(color: muted, fontSize: 12),
                 ),
-
                 const SizedBox(height: 9),
-
                 InkWell(
                   onTap: () => _openFeedback(context),
                   child: const Row(
@@ -730,15 +758,10 @@ class AssessmentResultScreen extends StatelessWidget {
     );
   }
 
-  // =====================================================
-  // BUILD
-  // =====================================================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ivory,
-
       appBar: AppBar(
         backgroundColor: ivory,
         foregroundColor: forest,
@@ -753,7 +776,6 @@ class AssessmentResultScreen extends StatelessWidget {
           ),
         ),
       ),
-
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
@@ -767,9 +789,7 @@ class AssessmentResultScreen extends StatelessWidget {
                 letterSpacing: 1.5,
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               'Here is what\nwe found.',
               style: TextStyle(
@@ -780,27 +800,24 @@ class AssessmentResultScreen extends StatelessWidget {
                 letterSpacing: -1,
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               'A closer look at the visible condition '
               'of your produce.',
               style: TextStyle(color: muted, fontSize: 13, height: 1.5),
             ),
-
             const SizedBox(height: 23),
-
             _buildImagePreview(),
-
             const SizedBox(height: 18),
 
+            if (!widget.result.isDemo) ...[
+              _buildSaveStatus(),
+              const SizedBox(height: 18),
+            ],
+
             _buildResultCard(),
-
             const SizedBox(height: 16),
-
             _buildInformationCards(),
-
             const SizedBox(height: 18),
 
             const _SectionCard(
@@ -825,17 +842,11 @@ class AssessmentResultScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 18),
-
             _buildRecommendations(),
-
             const SizedBox(height: 18),
-
             _buildSafetyNotice(),
-
             const SizedBox(height: 18),
-
             _buildFeedbackCard(context),
-
             const SizedBox(height: 25),
 
             SizedBox(
@@ -884,10 +895,6 @@ class AssessmentResultScreen extends StatelessWidget {
   }
 }
 
-// =====================================================
-// REUSABLE INFORMATION CARD
-// =====================================================
-
 class _InfoCard extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -912,16 +919,12 @@ class _InfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: AppTheme.forest, size: 23),
-
           const SizedBox(height: 15),
-
           Text(
             label,
             style: const TextStyle(color: AppTheme.muted, fontSize: 12),
           ),
-
           const SizedBox(height: 6),
-
           Text(
             value,
             maxLines: 2,
@@ -937,10 +940,6 @@ class _InfoCard extends StatelessWidget {
     );
   }
 }
-
-// =====================================================
-// REUSABLE SECTION CARD
-// =====================================================
 
 class _SectionCard extends StatelessWidget {
   final IconData icon;
@@ -978,9 +977,7 @@ class _SectionCard extends StatelessWidget {
                 ),
                 child: Icon(icon, color: AppTheme.forest, size: 22),
               ),
-
               const SizedBox(width: 12),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -993,9 +990,7 @@ class _SectionCard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-
                     const SizedBox(height: 4),
-
                     Text(
                       subtitle,
                       style: const TextStyle(
@@ -1009,9 +1004,7 @@ class _SectionCard extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 19),
-
           child,
         ],
       ),

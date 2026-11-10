@@ -2,11 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../services/assessment_storage.dart';
 import '../theme/app_theme.dart';
 import 'camera_screen.dart';
 import 'feedback_screen.dart';
 
-class SpoilageAlertScreen extends StatelessWidget {
+class SpoilageAlertScreen extends StatefulWidget {
   final String imagePath;
   final String produceName;
   final double? confidence;
@@ -20,26 +21,29 @@ class SpoilageAlertScreen extends StatelessWidget {
     this.isDemo = false,
   });
 
+  @override
+  State<SpoilageAlertScreen> createState() => _SpoilageAlertScreenState();
+}
+
+class _SpoilageAlertScreenState extends State<SpoilageAlertScreen> {
   static const Color forest = AppTheme.forest;
   static const Color ivory = AppTheme.ivory;
-  static const Color sage = AppTheme.sage;
   static const Color muted = AppTheme.muted;
-
+  static const Color sage = AppTheme.sage;
   static const Color alertRed = Color(0xFFAD3D35);
   static const Color alertLight = Color(0xFFFCE8E5);
-  static const Color alertText = Color(0xFF7B2B26);
 
-  String get formattedProduceName {
-    var name = produceName.trim().replaceAll(RegExp(r'[_-]+'), ' ');
+  bool _isSaving = false;
+  bool _isSaved = false;
+  String? _saveError;
+  int? _savedAssessmentId;
 
+  String get _produceName {
+    var name = widget.produceName.trim();
+    name = name.replaceAll(RegExp(r'[_-]+'), ' ');
     name = name.replaceFirst(
       RegExp(r'^(fresh|rotten|spoiled|bad|good)\s+', caseSensitive: false),
       '',
-    );
-
-    name = name.replaceAllMapped(
-      RegExp(r'([a-z])([A-Z])'),
-      (match) => '${match.group(1)} ${match.group(2)}',
     );
 
     if (name.isEmpty) return 'Unknown produce';
@@ -54,14 +58,68 @@ class SpoilageAlertScreen extends StatelessWidget {
         .join(' ');
   }
 
-  double? get modelScore {
-    if (confidence == null || !confidence!.isFinite) {
-      return null;
-    }
-    return confidence!.clamp(0.0, 1.0).toDouble();
+  double? get _score {
+    final value = widget.confidence;
+    if (value == null || !value.isFinite) return null;
+    return value.clamp(0.0, 1.0).toDouble();
   }
 
-  void _scanAgain(BuildContext context) {
+  @override
+  void initState() {
+    super.initState();
+
+    debugPrint(
+      'FRESHTRACK: Spoilage screen opened, '
+      'isDemo=${widget.isDemo}',
+    );
+
+    if (!widget.isDemo) {
+      _saveAssessment();
+    }
+  }
+
+  Future<void> _saveAssessment() async {
+    if (_isSaving || _isSaved || widget.isDemo) return;
+
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+
+    try {
+      final assessmentId = await AssessmentStorage.saveAssessment(
+        produceName: _produceName,
+        freshnessStatus: 'spoiled',
+        confidence: _score,
+        imagePath: widget.imagePath,
+      );
+
+      debugPrint(
+        'FRESHTRACK: Spoiled assessment saved '
+        'with ID $assessmentId',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedAssessmentId = assessmentId;
+        _isSaved = true;
+        _isSaving = false;
+      });
+    } catch (error, stackTrace) {
+      debugPrint('FRESHTRACK: Spoilage save failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+        _saveError = 'Could not save this assessment.';
+      });
+    }
+  }
+
+  void _scanAgain() {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const CameraScreen()),
@@ -69,17 +127,42 @@ class SpoilageAlertScreen extends StatelessWidget {
     );
   }
 
-  void _goHome(BuildContext context) {
+  void _goHome() {
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  void _openFeedback(BuildContext context) {
+  void _openFeedback() {
+    if (widget.isDemo) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Feedback is unavailable for demo assessments.'),
+        ),
+      );
+      return;
+    }
+
+    final assessmentId = _savedAssessmentId;
+
+    if (assessmentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _saveError ??
+                'Please wait until the assessment has been '
+                    'saved before giving feedback.',
+          ),
+        ),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => FeedbackScreen(
-          produceName: formattedProduceName,
-          assessmentStatus: 'Likely spoiled',
+          assessmentId: assessmentId,
+          produceName: _produceName,
+          assessmentStatus: 'spoiled',
         ),
       ),
     );
@@ -90,136 +173,114 @@ class SpoilageAlertScreen extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppTheme.border),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(19),
-        child: Stack(
-          children: [
-            SizedBox(
-              height: 245,
-              width: double.infinity,
-              child: Image.file(
-                File(imagePath),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: sage,
-                    child: const Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: forest,
-                        size: 55,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            Positioned(
-              left: 13,
-              bottom: 13,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 13,
-                  vertical: 9,
+        borderRadius: BorderRadius.circular(18),
+        child: SizedBox(
+          width: double.infinity,
+          height: 245,
+          child: Image.file(
+            File(widget.imagePath),
+            fit: BoxFit.cover,
+            errorBuilder: (_, error, stackTrace) {
+              return Container(
+                color: sage,
+                child: const Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: forest,
+                    size: 50,
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  color: forest.withValues(alpha: 0.88),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.image_outlined, color: Colors.white, size: 15),
-                    SizedBox(width: 7),
-                    Text(
-                      'Analysed image',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildSaveStatus() {
+    if (widget.isDemo) return const SizedBox.shrink();
+
+    final hasError = _saveError != null;
+    final color = hasError ? alertRed : forest;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          if (_isSaving)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: forest),
+            )
+          else
+            Icon(
+              hasError
+                  ? Icons.error_outline
+                  : _isSaved
+                  ? Icons.check_circle_outline
+                  : Icons.info_outline,
+              color: color,
+              size: 19,
+            ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              _isSaved
+                  ? 'Assessment saved to local history'
+                  : hasError
+                  ? _saveError!
+                  : 'Saving assessment...',
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (hasError)
+            TextButton(onPressed: _saveAssessment, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAlertCard() {
-    final score = modelScore;
+    final score = _score;
 
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: alertLight,
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 49,
-                height: 49,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.warning_amber_rounded,
-                  color: alertRed,
-                  size: 28,
-                ),
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: alertRed,
+                size: 28,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'FRESHTRACK ASSESSMENT',
-                      style: TextStyle(
-                        color: alertRed,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    SizedBox(height: 5),
-                    Text(
-                      'Visual spoilage classification',
-                      style: TextStyle(color: alertText, fontSize: 12),
-                    ),
-                  ],
+                child: Text(
+                  'FRESHTRACK ASSESSMENT',
+                  style: TextStyle(
+                    color: alertRed,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              if (isDemo)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'DEMO',
-                    style: TextStyle(
-                      color: alertRed,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
+              if (widget.isDemo) const Chip(label: Text('DEMO')),
             ],
           ),
           const SizedBox(height: 22),
@@ -229,82 +290,45 @@ class SpoilageAlertScreen extends StatelessWidget {
               color: forest,
               fontSize: 29,
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.8,
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 10),
           const Text(
-            'The model identified image patterns '
-            'associated with spoiled produce. '
-            'This prediction may be incorrect.',
-            style: TextStyle(color: alertText, fontSize: 13, height: 1.6),
+            'The CNN identified visual patterns associated '
+            'with spoiled produce. This prediction may be incorrect.',
+            style: TextStyle(color: alertRed, fontSize: 13, height: 1.5),
           ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.eco_outlined, color: alertRed, size: 18),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    formattedProduceName,
-                    style: const TextStyle(
-                      color: forest,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
+          const SizedBox(height: 18),
+          Text(
+            'Produce: $_produceName',
+            style: const TextStyle(
+              color: forest,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
             ),
           ),
           if (score != null) ...[
-            const SizedBox(height: 22),
-            Divider(color: alertRed.withValues(alpha: 0.18)),
-            const SizedBox(height: 15),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Model score',
-                  style: TextStyle(
-                    color: forest,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '${(score * 100).toStringAsFixed(1)}%',
-                  style: const TextStyle(
-                    color: forest,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: LinearProgressIndicator(
-                value: score,
-                minHeight: 8,
-                backgroundColor: alertRed.withValues(alpha: 0.15),
-                valueColor: const AlwaysStoppedAnimation<Color>(alertRed),
+            const SizedBox(height: 18),
+            Text(
+              'Model score: ${(score * 100).toStringAsFixed(1)}%',
+              style: const TextStyle(
+                color: forest,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: score,
+              minHeight: 8,
+              color: alertRed,
+              backgroundColor: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            const SizedBox(height: 10),
             const Text(
-              'This is the output score for the selected '
-              'class, not a verified probability of '
-              'spoilage or food-safety risk.',
-              style: TextStyle(color: alertText, fontSize: 11, height: 1.5),
+              'This score is not a verified probability '
+              'of spoilage or food-safety risk.',
+              style: TextStyle(color: alertRed, fontSize: 11, height: 1.5),
             ),
           ],
         ],
@@ -312,247 +336,71 @@ class SpoilageAlertScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInformationCards() {
-    return Row(
-      children: [
-        Expanded(
-          child: _AlertInfoCard(
-            icon: Icons.spa_outlined,
-            label: 'Produce',
-            value: formattedProduceName,
-          ),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: _AlertInfoCard(
-            icon: Icons.center_focus_strong_rounded,
-            label: 'Condition',
-            value: 'SPOILED',
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSafetyStep({
-    required int number,
-    required String title,
-    required String description,
+  Widget _section({
     required IconData icon,
+    required String title,
+    required Widget child,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: sage,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(icon, color: forest, size: 21),
-        ),
-        const SizedBox(width: 13),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$number. $title',
-                style: const TextStyle(
-                  color: forest,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                description,
-                style: const TextStyle(color: muted, fontSize: 12, height: 1.6),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecommendations() {
-    return _AlertSectionCard(
-      icon: Icons.fact_check_outlined,
-      title: 'What should you do?',
-      subtitle: 'Practical food-handling guidance.',
-      child: Column(
-        children: [
-          _buildSafetyStep(
-            number: 1,
-            icon: Icons.no_food_outlined,
-            title: 'Inspect before consuming',
-            description:
-                'Check for mould, unusual odours, '
-                'extensive softening or visible decay. '
-                'Do not taste food to test its safety.',
-          ),
-          const SizedBox(height: 22),
-          _buildSafetyStep(
-            number: 2,
-            icon: Icons.delete_outline_rounded,
-            title: 'Discard clearly spoiled food',
-            description:
-                'Avoid eating badly deteriorated produce. '
-                'Dispose of items showing clear signs '
-                'of unsafe spoilage.',
-          ),
-          const SizedBox(height: 22),
-          _buildSafetyStep(
-            number: 3,
-            icon: Icons.cleaning_services_outlined,
-            title: 'Keep surfaces clean',
-            description:
-                'Wash your hands and clean containers '
-                'or surfaces that contacted spoiled food.',
-          ),
-          const SizedBox(height: 22),
-          _buildSafetyStep(
-            number: 4,
-            icon: Icons.visibility_outlined,
-            title: 'Check nearby produce',
-            description:
-                'Inspect other stored fruits and '
-                'vegetables for signs of deterioration.',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExplanation() {
-    return const _AlertSectionCard(
-      icon: Icons.lightbulb_outline_rounded,
-      title: 'Understanding this alert',
-      subtitle: 'How FreshTrack reached its prediction.',
-      child: Text(
-        'FreshTrack uses a convolutional neural '
-        'network (CNN) to classify visual patterns '
-        'in fruit and vegetable images.\n\n'
-        'Features such as colour and surface '
-        'appearance may influence the prediction. '
-        'Different produce items can look similar, '
-        'so the model may occasionally identify '
-        'the wrong item or condition.',
-        style: TextStyle(color: Color(0xFF526557), fontSize: 13, height: 1.65),
-      ),
-    );
-  }
-
-  Widget _buildSafetyNotice() {
     return Container(
-      padding: const EdgeInsets.all(19),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF3E3),
-        borderRadius: BorderRadius.circular(21),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.shield_outlined, color: Color(0xFF94631B), size: 24),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Important food safety reminder',
-                  style: TextStyle(
-                    color: Color(0xFF80571E),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'A photograph cannot confirm whether '
-                  'food is safe or unsafe to eat. '
-                  'Some harmful microorganisms, toxins '
-                  'and contaminants are not visible. '
-                  'Use this assessment as additional '
-                  'guidance, not a definitive test.',
-                  style: TextStyle(
-                    color: Color(0xFF80571E),
-                    fontSize: 12,
-                    height: 1.6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeedbackCard(BuildContext context) {
-    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(23),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 53,
-            height: 53,
-            decoration: BoxDecoration(
-              color: sage,
-              borderRadius: BorderRadius.circular(17),
-            ),
-            child: const Icon(
-              Icons.rate_review_outlined,
-              color: forest,
-              size: 26,
-            ),
+          Row(
+            children: [
+              Icon(icon, color: forest, size: 23),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: forest,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _guidanceRow(IconData icon, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 17),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: forest, size: 22),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Was this prediction correct?',
-                  style: TextStyle(
+                Text(
+                  title,
+                  style: const TextStyle(
                     color: forest,
-                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 5),
-                const Text(
-                  'Help us evaluate FreshTrack.',
-                  style: TextStyle(color: muted, fontSize: 12),
-                ),
-                const SizedBox(height: 10),
-                InkWell(
-                  onTap: () => _openFeedback(context),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Give feedback',
-                        style: TextStyle(
-                          color: forest,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(width: 5),
-                      Icon(
-                        Icons.arrow_forward_rounded,
-                        color: forest,
-                        size: 16,
-                      ),
-                    ],
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    height: 1.5,
                   ),
                 ),
               ],
@@ -570,15 +418,10 @@ class SpoilageAlertScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: ivory,
         foregroundColor: forest,
-        elevation: 0,
         centerTitle: true,
         title: const Text(
           'Spoilage alert',
-          style: TextStyle(
-            color: forest,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-          ),
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
         ),
       ),
       body: SafeArea(
@@ -602,186 +445,105 @@ class SpoilageAlertScreen extends StatelessWidget {
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
                 height: 1.12,
-                letterSpacing: -1,
               ),
             ),
             const SizedBox(height: 10),
             const Text(
-              'Here is what the model predicted '
-              'from your produce photo.',
+              'Here is what the model predicted from your photo.',
               style: TextStyle(color: muted, fontSize: 13, height: 1.5),
             ),
-            const SizedBox(height: 23),
+            const SizedBox(height: 22),
             _buildImagePreview(),
+            _buildSaveStatus(),
             const SizedBox(height: 18),
             _buildAlertCard(),
-            const SizedBox(height: 16),
-            _buildInformationCards(),
             const SizedBox(height: 18),
-            _buildExplanation(),
+            _section(
+              icon: Icons.info_outline,
+              title: 'Understanding this alert',
+              child: const Text(
+                'FreshTrack uses a convolutional neural network '
+                '(CNN) to classify visual patterns in images. '
+                'Colour and surface appearance may influence '
+                'its prediction, and mistakes are possible.',
+                style: TextStyle(color: muted, fontSize: 13, height: 1.6),
+              ),
+            ),
             const SizedBox(height: 18),
-            _buildRecommendations(),
+            _section(
+              icon: Icons.fact_check_outlined,
+              title: 'What should you do?',
+              child: Column(
+                children: [
+                  _guidanceRow(
+                    Icons.visibility_outlined,
+                    'Inspect before consuming',
+                    'Check for mould, unusual odours and visible decay. '
+                        'Do not taste food to test its safety.',
+                  ),
+                  _guidanceRow(
+                    Icons.delete_outline,
+                    'Discard clearly spoiled food',
+                    'Avoid consuming produce showing clear signs '
+                        'of deterioration.',
+                  ),
+                  _guidanceRow(
+                    Icons.cleaning_services_outlined,
+                    'Keep surfaces clean',
+                    'Wash hands and clean surfaces that contacted '
+                        'spoiled produce.',
+                  ),
+                  _guidanceRow(
+                    Icons.spa_outlined,
+                    'Check nearby produce',
+                    'Inspect other stored items for signs of spoilage.',
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 18),
-            _buildSafetyNotice(),
+            _section(
+              icon: Icons.shield_outlined,
+              title: 'Important food safety reminder',
+              child: const Text(
+                'A photograph cannot confirm whether food is '
+                'safe to eat. Invisible microorganisms, toxins '
+                'and contaminants may be present. Treat this '
+                'assessment as guidance, not a definitive test.',
+                style: TextStyle(color: muted, fontSize: 12, height: 1.6),
+              ),
+            ),
             const SizedBox(height: 18),
-            _buildFeedbackCard(context),
+            _section(
+              icon: Icons.rate_review_outlined,
+              title: 'Was this prediction correct?',
+              child: TextButton.icon(
+                onPressed: widget.isDemo || !_isSaved ? null : _openFeedback,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Give feedback'),
+              ),
+            ),
             const SizedBox(height: 25),
             SizedBox(
               height: 57,
               child: ElevatedButton.icon(
-                onPressed: () => _scanAgain(context),
+                onPressed: _scanAgain,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: forest,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(17),
-                  ),
                 ),
                 icon: const Icon(Icons.center_focus_strong_rounded),
-                label: const Text(
-                  'Scan another item',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                ),
+                label: const Text('Scan another item'),
               ),
             ),
-            const SizedBox(height: 11),
-            SizedBox(
-              height: 53,
-              child: OutlinedButton.icon(
-                onPressed: () => _goHome(context),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: forest,
-                  side: const BorderSide(color: AppTheme.border),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(17),
-                  ),
-                ),
-                icon: const Icon(Icons.home_outlined),
-                label: const Text(
-                  'Back to home',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _goHome,
+              icon: const Icon(Icons.home_outlined),
+              label: const Text('Back to home'),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _AlertInfoCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _AlertInfoCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: AppTheme.forest, size: 23),
-          const SizedBox(height: 15),
-          Text(
-            label,
-            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppTheme.forest,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AlertSectionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Widget child;
-
-  const _AlertSectionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(23),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 43,
-                height: 43,
-                decoration: BoxDecoration(
-                  color: AppTheme.sage,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: AppTheme.forest, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: AppTheme.forest,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 11,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 19),
-          child,
-        ],
       ),
     );
   }
