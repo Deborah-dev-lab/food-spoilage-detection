@@ -1,0 +1,17 @@
+FRESHTRACK - CHAPTER FIVE TEST ENVIRONMENT
+
+Application: FreshTrack
+Framework: Flutter / Dart
+Machine Learning: CNN V3 / TensorFlow Lite
+Local Database: SQLite
+
+DEVICE INFORMATION
+Model:
+Android Version:
+Device ID:
+Flutter Version:
+
+TESTING INFORMATION
+Testing Date: 2026-11-12
+Testing Method: Physical Android device
+Network Conditions: Online and offline
