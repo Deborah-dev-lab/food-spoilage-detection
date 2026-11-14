@@ -7,6 +7,7 @@ import '../services/cnn_inference_service.dart';
 import '../theme/app_theme.dart';
 
 import 'assessment_result_screen.dart';
+import 'no_produce_detected_screen.dart';
 import 'spoilage_alert_screen.dart';
 import 'uncertain_result_screen.dart';
 
@@ -24,6 +25,11 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
   static const Color ivory = Color(0xFFF7F8F4);
   static const Color sage = Color(0xFFDCE9D6);
   static const Color muted = AppTheme.muted;
+  static const Color border = AppTheme.border;
+
+  // Provisional confidence threshold.
+  // This is not a validated non-produce detection threshold.
+  static const double uncertainThreshold = 0.65;
 
   final ImagePicker _picker = ImagePicker();
   final CnnInferenceService _cnnService = CnnInferenceService();
@@ -50,7 +56,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
   Future<void> _changePhoto(ImageSource source) async {
     if (_isPickingImage || _isAnalysing) return;
 
-    setState(() => _isPickingImage = true);
+    setState(() {
+      _isPickingImage = true;
+      _errorMessage = null;
+    });
 
     try {
       final photo = await _picker.pickImage(
@@ -68,20 +77,50 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
         });
       }
     } catch (error) {
+      debugPrint('Image selection error: $error');
+
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = 'Could not open the selected image.';
+        _errorMessage = 'Could not open the selected image. Please try again.';
       });
     } finally {
       if (mounted) {
-        setState(() => _isPickingImage = false);
+        setState(() {
+          _isPickingImage = false;
+        });
       }
     }
   }
 
+  Future<void> _showNoProduceScreen({
+    required String imagePath,
+    required bool isUncertain,
+  }) async {
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NoProduceDetectedScreen(
+          imagePath: imagePath,
+          isUncertain: isUncertain,
+          onRetry: () {
+            if (!mounted) return;
+
+            // Close the result screen and return to
+            // this review screen, where the user can
+            // retake or select another photograph.
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _analyseImage() async {
     if (_isAnalysing || _isPickingImage) return;
+
+    final analysedImagePath = _imagePath;
 
     setState(() {
       _isAnalysing = true;
@@ -89,7 +128,7 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     });
 
     try {
-      final file = File(_imagePath);
+      final file = File(analysedImagePath);
 
       if (!await file.exists()) {
         throw const FileSystemException(
@@ -99,47 +138,53 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
 
       final imageBytes = await file.readAsBytes();
 
+      if (imageBytes.isEmpty) {
+        throw const FormatException('The selected image is empty.');
+      }
+
       final prediction = await _cnnService.predict(imageBytes);
 
       if (!mounted) return;
 
-      final label = prediction.label;
+      final label = prediction.label.trim();
       final confidence = prediction.confidence;
 
-      // Temporary threshold until model calibration.
-      const double uncertainThreshold = 0.65;
-
-      if (!confidence.isFinite || confidence < uncertainThreshold) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => UncertainResultScreen(
-              imagePath: _imagePath,
-              produceName: label,
-              confidence: confidence.isFinite ? confidence : 0.0,
-              isDemo: false,
-            ),
-          ),
+      if (label.isEmpty ||
+          !confidence.isFinite ||
+          confidence < 0 ||
+          confidence > 1) {
+        await _showNoProduceScreen(
+          imagePath: analysedImagePath,
+          isUncertain: true,
         );
-
         return;
       }
 
-      // This label mapping is provisional.
-      // Confirm the exact labels.txt naming convention.
+      // A low-confidence prediction is inconclusive.
+      // It does not establish that no produce is present.
+      if (confidence < uncertainThreshold) {
+        await _showNoProduceScreen(
+          imagePath: analysedImagePath,
+          isUncertain: true,
+        );
+        return;
+      }
+
       final normalizedLabel = label.toLowerCase();
 
+      // This mapping follows the naming convention in
+      // your existing implementation. It should be checked
+      // against the actual labels.txt file.
       final isSpoiled =
           normalizedLabel.contains('rotten') ||
           normalizedLabel.contains('spoiled') ||
           normalizedLabel.contains('bad');
 
       if (isSpoiled) {
-        await Navigator.push(
-          context,
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => SpoilageAlertScreen(
-              imagePath: _imagePath,
+              imagePath: analysedImagePath,
               produceName: label,
               confidence: confidence,
               isDemo: false,
@@ -147,11 +192,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
           ),
         );
       } else {
-        await Navigator.push(
-          context,
+        await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => AssessmentResultScreen(
-              imagePath: _imagePath,
+              imagePath: analysedImagePath,
               result: AssessmentResult(
                 produceName: label,
                 status: FreshnessStatus.fresh,
@@ -174,26 +218,43 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       });
     } finally {
       if (mounted) {
-        setState(() => _isAnalysing = false);
+        setState(() {
+          _isAnalysing = false;
+        });
       }
     }
   }
 
-  void _showDemoOptions() {
-    showModalBottomSheet<void>(
+  Future<void> _showDemoOptions() async {
+    if (_isAnalysing || _isPickingImage) return;
+
+    await showModalBottomSheet<void>(
       context: context,
       backgroundColor: ivory,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
+          top: false,
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: border,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 const Text(
                   'Demo result screens',
                   style: TextStyle(
@@ -204,8 +265,9 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'These options show simulated results '
-                  'for interface testing only.',
+                  'These are simulated results for '
+                  'interface testing only. They do not '
+                  'represent a real CNN assessment.',
                   style: TextStyle(color: muted, fontSize: 12, height: 1.5),
                 ),
                 const SizedBox(height: 18),
@@ -217,8 +279,8 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                   title: const Text('Fresh result'),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    Navigator.push(
-                      context,
+
+                    Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => AssessmentResultScreen(
                           imagePath: _imagePath,
@@ -241,8 +303,8 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                   title: const Text('Spoilage alert'),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    Navigator.push(
-                      context,
+
+                    Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => SpoilageAlertScreen(
                           imagePath: _imagePath,
@@ -259,8 +321,8 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                   title: const Text('Uncertain result'),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    Navigator.push(
-                      context,
+
+                    Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => UncertainResultScreen(
                           imagePath: _imagePath,
@@ -269,6 +331,24 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                           isDemo: true,
                         ),
                       ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.image_search_outlined,
+                    color: forest,
+                  ),
+                  title: const Text('No produce / inconclusive screen'),
+                  subtitle: const Text(
+                    'Preview the new assessment-unavailable UI',
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+
+                    _showNoProduceScreen(
+                      imagePath: _imagePath,
+                      isUncertain: true,
                     );
                   },
                 ),
@@ -286,7 +366,7 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.border),
+        border: Border.all(color: border),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(17),
@@ -325,6 +405,14 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 : () => _changePhoto(ImageSource.camera),
             icon: const Icon(Icons.camera_alt_outlined),
             label: const Text('Retake'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: forest,
+              side: const BorderSide(color: border),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -335,6 +423,14 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 : () => _changePhoto(ImageSource.gallery),
             icon: const Icon(Icons.photo_library_outlined),
             label: const Text('Gallery'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: forest,
+              side: const BorderSide(color: border),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
           ),
         ),
       ],
@@ -347,7 +443,7 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.border),
+        border: Border.all(color: border),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,6 +467,74 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
             text: 'One main item in the image',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorMessage() {
+    if (_errorMessage == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBE5E2),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFA34439),
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(
+                color: Color(0xFFA34439),
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyseButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 58,
+      child: ElevatedButton.icon(
+        onPressed: _isAnalysing || _isPickingImage ? null : _analyseImage,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: forest,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: border,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        icon: _isAnalysing
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.auto_awesome_outlined),
+        label: Text(
+          _isAnalysing ? 'Analysing image...' : 'Analyse freshness',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+        ),
       ),
     );
   }
@@ -422,73 +586,18 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
               style: TextStyle(color: muted, fontSize: 13, height: 1.5),
             ),
             const SizedBox(height: 22),
-
             _buildPhotoPreview(),
-
             const SizedBox(height: 15),
-
             _buildPhotoActions(),
-
             const SizedBox(height: 24),
-
             _buildChecklist(),
-
             if (_errorMessage != null) ...[
               const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFBE5E2),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    color: Color(0xFFA34439),
-                    fontSize: 13,
-                  ),
-                ),
-              ),
+              _buildErrorMessage(),
             ],
-
             const SizedBox(height: 24),
-
-            SizedBox(
-              height: 58,
-              child: ElevatedButton.icon(
-                onPressed: _isAnalysing || _isPickingImage
-                    ? null
-                    : _analyseImage,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: forest,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppTheme.border,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-                icon: _isAnalysing
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.auto_awesome_outlined),
-                label: Text(
-                  _isAnalysing ? 'Analysing image...' : 'Analyse freshness',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-
+            _buildAnalyseButton(),
             const SizedBox(height: 15),
-
             TextButton(
               onPressed: _isAnalysing || _isPickingImage
                   ? null
@@ -502,9 +611,7 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               'AI predictions are based on visible appearance '
               'and do not guarantee food safety.',

@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 
+// =====================================================
+// FRESHTRACK ONBOARDING SCREEN
+// =====================================================
+
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -20,7 +24,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   int _currentPage = 0;
 
-  // All images are from the existing learning folder.
+  // =====================================================
+  // ONBOARDING PAGE CONTENT
+  // =====================================================
+
+  // Images already available in your assets folder.
+
   final List<_OnboardingPageData> _pages = const [
     _OnboardingPageData(
       icon: Icons.camera_alt_outlined,
@@ -56,10 +65,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
   ];
 
+  // =====================================================
+  // NAVIGATION — FIXED
+  // =====================================================
+
   void _openHomeScreen() {
-    Navigator.pushReplacement(
-      context,
+    if (!mounted) return;
+
+    // Remove Splash and Onboarding from the stack.
+    // Home becomes the root screen.
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
     );
   }
 
@@ -92,6 +109,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       height: imageHeight,
       child: Stack(
         children: [
+          // Main image
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
@@ -113,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          // Gradient for better contrast.
+          // Gradient for image contrast
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
@@ -129,7 +147,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          // Small FreshTrack label.
+          // FreshTrack image label
           Positioned(
             top: 15,
             left: 15,
@@ -158,7 +176,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          // Page number.
+          // Page number
           Positioned(
             right: 18,
             bottom: 15,
@@ -251,11 +269,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
           child: Column(
             children: [
-              // FRESHTRACK HEADER
+              // =========================================
+              // HEADER
+              // =========================================
+
               Row(
                 children: [
                   const Icon(Icons.eco_rounded, color: lime, size: 28),
+
                   const SizedBox(width: 8),
+
                   const Expanded(
                     child: Text(
                       'freshtrack.',
@@ -267,6 +290,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                     ),
                   ),
+
                   TextButton(
                     onPressed: _openHomeScreen,
                     style: TextButton.styleFrom(foregroundColor: paleGreen),
@@ -283,7 +307,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
               const SizedBox(height: 8),
 
+              // =========================================
               // SWIPEABLE ONBOARDING PAGES
+              // =========================================
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
@@ -305,7 +331,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
               const SizedBox(height: 12),
 
-              // PROGRESS INDICATORS
+              // =========================================
+              // PAGE PROGRESS INDICATORS
+              // =========================================
               Row(
                 children: [
                   Row(
@@ -325,7 +353,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       );
                     }),
                   ),
+
                   const Spacer(),
+
                   Text(
                     '${_currentPage + 1} / ${_pages.length}',
                     style: const TextStyle(
@@ -339,7 +369,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
               const SizedBox(height: 22),
 
+              // =========================================
               // CONTINUE / GET STARTED BUTTON
+              // =========================================
               SizedBox(
                 width: double.infinity,
                 height: 56,

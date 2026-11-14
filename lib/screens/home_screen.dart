@@ -9,6 +9,10 @@ import 'profile_screen.dart';
 import 'spoilage_alert_screen.dart';
 import 'vendor/vendor_dashboard_screen.dart';
 
+// =====================================================
+// FRESHTRACK HOME SCREEN
+// =====================================================
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -19,48 +23,36 @@ class HomeScreen extends StatelessWidget {
   static const Color muted = AppTheme.muted;
   static const Color border = AppTheme.border;
 
+  // =====================================================
+  // NAVIGATION
+  // =====================================================
+
+  void _openPage(BuildContext context, Widget page) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
+
   void _openCamera(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const CameraScreen()),
-    );
+    _openPage(context, const CameraScreen());
   }
 
   void _openGallery(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const CameraScreen(openGallery: true)),
-    );
+    _openPage(context, const CameraScreen(openGallery: true));
   }
 
   void _openHistory(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const HistoryScreen()),
-    );
+    _openPage(context, const HistoryScreen());
   }
 
   void _openProfile(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    );
+    _openPage(context, const ProfileScreen());
   }
 
-  void _openVendorDashboard(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const VendorDashboardScreen()),
-    );
+  void _openVendor(BuildContext context) {
+    _openPage(context, const VendorDashboardScreen());
   }
 
-  void _openLearningHub(BuildContext context, {String category = 'All'}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => LearningHubScreen(initialCategory: category),
-      ),
-    );
+  void _openLearning(BuildContext context, {String category = 'All'}) {
+    _openPage(context, LearningHubScreen(initialCategory: category));
   }
 
   Future<void> _previewSpoilageAlert(BuildContext context) async {
@@ -71,51 +63,80 @@ class HomeScreen extends StatelessWidget {
         maxWidth: 1600,
       );
 
-      if (photo == null || !context.mounted) return;
+      if (photo == null || !context.mounted) {
+        return;
+      }
 
-      Navigator.push(
+      _openPage(
         context,
-        MaterialPageRoute(
-          builder: (_) => SpoilageAlertScreen(
-            imagePath: photo.path,
-            produceName: 'Selected produce (demo)',
-            confidence: 0.94,
-            isDemo: true,
-          ),
+        SpoilageAlertScreen(
+          imagePath: photo.path,
+          produceName: 'Selected produce (demo)',
+          confidence: 0.94,
+          isDemo: true,
         ),
       );
     } catch (error) {
       if (!context.mounted) return;
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Could not open photo: $error')));
     }
   }
 
+  // =====================================================
+  // MAIN LAYOUT
+  // =====================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: canvas,
+
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 30),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
           children: [
             _buildHeader(context),
-            const SizedBox(height: 30),
+
+            const SizedBox(height: 28),
+
             _buildGreeting(),
-            const SizedBox(height: 20),
-            _buildVendorModeCard(context),
-            const SizedBox(height: 24),
-            _buildScanCard(context),
-            const SizedBox(height: 15),
+
+            const SizedBox(height: 23),
+
+            _buildHeroCard(context),
+
+            const SizedBox(height: 16),
+
             _buildQuickActions(context),
+
             const SizedBox(height: 30),
-            _buildLearningSection(context),
-            const SizedBox(height: 30),
-            _buildRecentActivity(context),
-            const SizedBox(height: 24),
-            _buildSafetyTip(),
+
+            _buildSectionHeading(
+              title: 'Explore FreshTrack',
+              subtitle: 'More ways to care for your produce.',
+            ),
+
             const SizedBox(height: 15),
+
+            _buildVendorCard(context),
+
+            const SizedBox(height: 30),
+
+            _buildLearningSection(context),
+
+            const SizedBox(height: 30),
+
+            _buildRecentActivity(context),
+
+            const SizedBox(height: 22),
+
+            _buildSafetyTip(),
+
+            const SizedBox(height: 15),
+
             Center(
               child: TextButton.icon(
                 onPressed: () => _previewSpoilageAlert(context),
@@ -129,71 +150,22 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          backgroundColor: Colors.white,
-          indicatorColor: sage,
-          iconTheme: WidgetStateProperty.resolveWith((states) {
-            return IconThemeData(
-              color: states.contains(WidgetState.selected) ? forest : muted,
-              size: 24,
-            );
-          }),
-          labelTextStyle: WidgetStateProperty.resolveWith((states) {
-            return TextStyle(
-              color: states.contains(WidgetState.selected) ? forest : muted,
-              fontSize: 11,
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w800
-                  : FontWeight.w500,
-            );
-          }),
-        ),
-        child: NavigationBar(
-          height: 72,
-          selectedIndex: 0,
-          onDestinationSelected: (index) {
-            switch (index) {
-              case 1:
-                _openCamera(context);
-                break;
-              case 2:
-                _openHistory(context);
-                break;
-              case 3:
-                _openProfile(context);
-                break;
-            }
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.center_focus_strong_rounded),
-              label: 'Scan',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.history_rounded),
-              label: 'History',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline_rounded),
-              label: 'Profile',
-            ),
-          ],
-        ),
-      ),
+
+      bottomNavigationBar: _buildBottomNavigation(context),
     );
   }
+
+  // =====================================================
+  // HEADER
+  // =====================================================
 
   Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.eco_rounded, color: forest, size: 28),
+        const Icon(Icons.eco_rounded, color: forest, size: 29),
+
         const SizedBox(width: 8),
+
         const Expanded(
           child: Text(
             'freshtrack.',
@@ -205,6 +177,7 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
+
         IconButton(
           tooltip: 'Open profile',
           onPressed: () => _openProfile(context),
@@ -217,6 +190,10 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
+
+  // =====================================================
+  // GREETING
+  // =====================================================
 
   Widget _buildGreeting() {
     return const Column(
@@ -231,7 +208,9 @@ class HomeScreen extends StatelessWidget {
             letterSpacing: 1.6,
           ),
         ),
+
         SizedBox(height: 9),
+
         Text(
           "Hello, let's check\nwhat's fresh.",
           style: TextStyle(
@@ -242,168 +221,114 @@ class HomeScreen extends StatelessWidget {
             height: 1.15,
           ),
         ),
+
         SizedBox(height: 10),
+
         Text(
-          'Your everyday space for smarter food choices.',
-          style: TextStyle(color: muted, fontSize: 14, height: 1.5),
+          'Your everyday space for smarter '
+          'food choices and better produce care.',
+          style: TextStyle(color: muted, fontSize: 13, height: 1.55),
         ),
       ],
     );
   }
 
-  Widget _buildVendorModeCard(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(21),
-      child: InkWell(
-        onTap: () => _openVendorDashboard(context),
-        borderRadius: BorderRadius.circular(21),
-        child: Container(
-          padding: const EdgeInsets.all(17),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(21),
-            border: Border.all(color: border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 49,
-                height: 49,
-                decoration: BoxDecoration(
-                  color: sage,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: const Icon(
-                  Icons.storefront_outlined,
-                  color: forest,
-                  size: 27,
-                ),
-              ),
-              const SizedBox(width: 13),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Are you a produce vendor?',
-                      style: TextStyle(
-                        color: forest,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 5),
-                    Text(
-                      'Open your vendor workspace',
-                      style: TextStyle(color: muted, fontSize: 12, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.arrow_forward_rounded, color: forest, size: 22),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // =====================================================
+  // HERO — FOOD SPOILAGE IMAGE
+  // =====================================================
 
-  Widget _buildScanCard(BuildContext context) {
+  Widget _buildHeroCard(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: forest,
         borderRadius: BorderRadius.circular(25),
       ),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'FRESHNESS CHECK',
-                      style: TextStyle(
-                        color: lime,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.6,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Check your\nproduce.',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
-                        letterSpacing: -0.7,
-                      ),
-                    ),
-                    SizedBox(height: 11),
-                    Text(
-                      'Take a photo to explore visible signs '
-                      'of freshness or spoilage.',
-                      style: TextStyle(color: sage, fontSize: 12, height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                width: 66,
-                height: 66,
-                decoration: BoxDecoration(
-                  color: lime.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.center_focus_strong_rounded,
-                  color: lime,
-                  size: 35,
-                ),
-              ),
-            ],
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+            child: const _LocalImage(
+              imagePath: 'assets/images/learning/food_spoilage.jpg',
+              height: 190,
+              fallbackIcon: Icons.eco_rounded,
+            ),
           ),
-          const SizedBox(height: 23),
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: () => _openCamera(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: lime,
-                foregroundColor: forest,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(17),
-                ),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.camera_alt_outlined, size: 21),
-                  SizedBox(width: 10),
-                  Text(
-                    'Start a scan',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+
+          Padding(
+            padding: const EdgeInsets.all(21),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'FRESHNESS CHECK',
+                  style: TextStyle(
+                    color: lime,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.6,
                   ),
-                  SizedBox(width: 10),
-                  Icon(Icons.arrow_forward_rounded, size: 20),
-                ],
-              ),
+                ),
+
+                const SizedBox(height: 10),
+
+                const Text(
+                  'Know your produce\nbetter.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                    letterSpacing: -0.7,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                const Text(
+                  'Take a photo to explore visible '
+                  'signs of freshness or spoilage.',
+                  style: TextStyle(color: sage, fontSize: 12, height: 1.5),
+                ),
+
+                const SizedBox(height: 21),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _openCamera(context),
+
+                    icon: const Icon(Icons.camera_alt_outlined, size: 21),
+
+                    label: const Text('Start a scan'),
+
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: lime,
+                      foregroundColor: forest,
+                      elevation: 0,
+                      textStyle: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(17),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  // =====================================================
+  // QUICK ACTIONS
+  // =====================================================
 
   Widget _buildQuickActions(BuildContext context) {
     return Row(
@@ -416,7 +341,9 @@ class HomeScreen extends StatelessWidget {
             onTap: () => _openGallery(context),
           ),
         ),
+
         const SizedBox(width: 12),
+
         Expanded(
           child: _QuickActionCard(
             icon: Icons.history_rounded,
@@ -430,7 +357,121 @@ class HomeScreen extends StatelessWidget {
   }
 
   // =====================================================
-  // LEARN & EXPLORE WITH REAL LOCAL IMAGES
+  // SECTION HEADING
+  // =====================================================
+
+  Widget _buildSectionHeading({
+    required String title,
+    required String subtitle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: forest,
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+
+        const SizedBox(height: 5),
+
+        Text(
+          subtitle,
+          style: const TextStyle(color: muted, fontSize: 12, height: 1.5),
+        ),
+      ],
+    );
+  }
+
+  // =====================================================
+  // VENDOR CARD — FOOD WASTE IMAGE
+  // =====================================================
+
+  Widget _buildVendorCard(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+
+      child: InkWell(
+        onTap: () => _openVendor(context),
+        borderRadius: BorderRadius.circular(22),
+
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: border),
+          ),
+
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(21),
+                ),
+                child: const _LocalImage(
+                  imagePath: 'assets/images/learning/food_waste.jpg',
+                  height: 150,
+                  fallbackIcon: Icons.storefront_outlined,
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(17),
+
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Are you a produce vendor?',
+                            style: TextStyle(
+                              color: forest,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+
+                          SizedBox(height: 6),
+
+                          Text(
+                            'Access your vendor workspace '
+                            'and manage your produce.',
+                            style: TextStyle(
+                              color: muted,
+                              fontSize: 12,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: forest,
+                      size: 23,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =====================================================
+  // LEARN & EXPLORE
   // =====================================================
 
   Widget _buildLearningSection(BuildContext context) {
@@ -450,8 +491,9 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
+
             TextButton(
-              onPressed: () => _openLearningHub(context),
+              onPressed: () => _openLearning(context),
               child: const Text(
                 'View all',
                 style: TextStyle(color: forest, fontWeight: FontWeight.w700),
@@ -459,47 +501,56 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
+
         const SizedBox(height: 5),
+
         const Text(
-          'Practical knowledge for safer handling '
-          'and smarter use of produce.',
+          'Simple tips to help you store, handle '
+          'and care for your produce.',
           style: TextStyle(color: muted, fontSize: 12, height: 1.5),
         ),
+
         const SizedBox(height: 16),
+
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _LearningCategoryCard(
-                title: 'Food Safety',
-                subtitle: 'Storage, hygiene and spoilage awareness.',
-                imagePath: 'assets/images/learning/food_safety.jpg',
-                icon: Icons.health_and_safety_outlined,
-                background: const Color(0xFFE4F1E6),
-                onTap: () => _openLearningHub(context, category: 'Food Safety'),
+              child: _LearningCard(
+                title: 'Food Storage',
+                subtitle: 'Keep produce fresh for longer.',
+                imagePath: 'assets/images/learning/food_storage.jpg',
+                fallbackIcon: Icons.kitchen_outlined,
+                onTap: () => _openLearning(context),
               ),
             ),
+
             const SizedBox(width: 12),
+
             Expanded(
-              child: _LearningCategoryCard(
-                title: 'Value Addition',
-                subtitle: 'Processing, preservation and reducing waste.',
-                imagePath: 'assets/images/learning/value_addition.jpg',
-                icon: Icons.auto_awesome_outlined,
-                background: const Color(0xFFFFE9D7),
-                onTap: () =>
-                    _openLearningHub(context, category: 'Value Addition'),
+              child: _LearningCard(
+                title: 'Food Hygiene',
+                subtitle: 'Better handling and hygiene.',
+                imagePath: 'assets/images/learning/food_hygiene.jpg',
+                fallbackIcon: Icons.health_and_safety_outlined,
+                onTap: () => _openLearning(context, category: 'Food Safety'),
               ),
             ),
           ],
         ),
+
         const SizedBox(height: 15),
+
         SizedBox(
           width: double.infinity,
+
           child: OutlinedButton.icon(
-            onPressed: () => _openLearningHub(context),
+            onPressed: () => _openLearning(context),
+
             icon: const Icon(Icons.menu_book_outlined),
+
             label: const Text('Explore all articles'),
+
             style: OutlinedButton.styleFrom(
               foregroundColor: forest,
               padding: const EdgeInsets.symmetric(vertical: 15),
@@ -514,6 +565,10 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  // =====================================================
+  // RECENT ACTIVITY
+  // =====================================================
+
   Widget _buildRecentActivity(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,12 +582,13 @@ class HomeScreen extends StatelessWidget {
                   color: forest,
                   fontSize: 21,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
                 ),
               ),
             ),
+
             TextButton(
               onPressed: () => _openHistory(context),
+
               child: const Text(
                 'View all',
                 style: TextStyle(color: forest, fontWeight: FontWeight.w700),
@@ -540,14 +596,18 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
+
         const SizedBox(height: 10),
+
         Container(
           padding: const EdgeInsets.all(15),
+
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: border),
           ),
+
           child: const Column(
             children: [
               FoodAssessmentTile(
@@ -558,7 +618,9 @@ class HomeScreen extends StatelessWidget {
                 statusBackground: Color(0xFFE5F3E8),
                 fallbackIcon: Icons.apple,
               ),
+
               Divider(height: 26, color: Color(0xFFE9EDE7)),
+
               FoodAssessmentTile(
                 name: 'Banana',
                 imagePath: 'assets/images/banana.jpg',
@@ -570,34 +632,45 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
         ),
+
         const SizedBox(height: 9),
+
         const Center(
           child: Text(
-            'Sample assessments - not actual CNN predictions',
+            'Sample assessments — not actual CNN predictions',
             textAlign: TextAlign.center,
-            style: TextStyle(color: muted, fontSize: 11),
+            style: TextStyle(color: muted, fontSize: 10),
           ),
         ),
       ],
     );
   }
 
+  // =====================================================
+  // FOOD SAFETY REMINDER
+  // =====================================================
+
   Widget _buildSafetyTip() {
     return Container(
       padding: const EdgeInsets.all(17),
+
       decoration: BoxDecoration(
         color: sage,
         borderRadius: BorderRadius.circular(20),
       ),
+
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.lightbulb_outline_rounded, color: forest, size: 25),
+
           SizedBox(width: 13),
+
           Expanded(
             child: Text(
-              'A photo can reveal visible spoilage, but it '
-              'cannot guarantee food safety.',
+              'A photograph can reveal visible '
+              'spoilage, but it cannot guarantee '
+              'food safety.',
               style: TextStyle(
                 color: forest,
                 fontSize: 12,
@@ -608,6 +681,117 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  // =====================================================
+  // BOTTOM NAVIGATION
+  // =====================================================
+
+  Widget _buildBottomNavigation(BuildContext context) {
+    return NavigationBarTheme(
+      data: NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        indicatorColor: sage,
+
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          return IconThemeData(
+            color: states.contains(WidgetState.selected) ? forest : muted,
+            size: 24,
+          );
+        }),
+
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          return TextStyle(
+            color: states.contains(WidgetState.selected) ? forest : muted,
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w500,
+          );
+        }),
+      ),
+
+      child: NavigationBar(
+        height: 72,
+        selectedIndex: 0,
+
+        onDestinationSelected: (index) {
+          switch (index) {
+            case 1:
+              _openCamera(context);
+              break;
+
+            case 2:
+              _openHistory(context);
+              break;
+
+            case 3:
+              _openProfile(context);
+              break;
+          }
+        },
+
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.center_focus_strong_rounded),
+            label: 'Scan',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.history_rounded),
+            label: 'History',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================
+// REUSABLE LOCAL IMAGE
+// =====================================================
+
+class _LocalImage extends StatelessWidget {
+  final String imagePath;
+  final double height;
+  final IconData fallbackIcon;
+
+  const _LocalImage({
+    required this.imagePath,
+    required this.height,
+    required this.fallbackIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      imagePath,
+      width: double.infinity,
+      height: height,
+      fit: BoxFit.cover,
+
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          width: double.infinity,
+          height: height,
+          color: HomeScreen.sage,
+          alignment: Alignment.center,
+
+          child: Icon(fallbackIcon, color: HomeScreen.forest, size: 45),
+        );
+      },
     );
   }
 }
@@ -634,42 +818,54 @@ class _QuickActionCard extends StatelessWidget {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(20),
+
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
+
         child: Container(
           padding: const EdgeInsets.all(16),
+
           decoration: BoxDecoration(
             border: Border.all(color: HomeScreen.border),
             borderRadius: BorderRadius.circular(20),
           ),
+
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 43,
                 height: 43,
+
                 decoration: BoxDecoration(
                   color: HomeScreen.sage,
                   borderRadius: BorderRadius.circular(13),
                 ),
+
                 child: Icon(icon, color: HomeScreen.forest, size: 23),
               ),
+
               const SizedBox(height: 14),
+
               Text(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+
                 style: const TextStyle(
                   color: HomeScreen.forest,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                 ),
               ),
+
               const SizedBox(height: 5),
+
               Text(
                 subtitle,
                 maxLines: 2,
+
                 style: const TextStyle(
                   color: HomeScreen.muted,
                   fontSize: 11,
@@ -685,23 +881,21 @@ class _QuickActionCard extends StatelessWidget {
 }
 
 // =====================================================
-// LEARNING CATEGORY CARD WITH LOCAL IMAGE
+// LEARNING CARD
 // =====================================================
 
-class _LearningCategoryCard extends StatelessWidget {
+class _LearningCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String imagePath;
-  final IconData icon;
-  final Color background;
+  final IconData fallbackIcon;
   final VoidCallback onTap;
 
-  const _LearningCategoryCard({
+  const _LearningCard({
     required this.title,
     required this.subtitle,
     required this.imagePath,
-    required this.icon,
-    required this.background,
+    required this.fallbackIcon,
     required this.onTap,
   });
 
@@ -710,14 +904,17 @@ class _LearningCategoryCard extends StatelessWidget {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(19),
+
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(19),
+
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: HomeScreen.border),
             borderRadius: BorderRadius.circular(19),
           ),
+
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -725,39 +922,35 @@ class _LearningCategoryCard extends StatelessWidget {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(18),
                 ),
-                child: Image.asset(
-                  imagePath,
+
+                child: _LocalImage(
+                  imagePath: imagePath,
                   height: 112,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 112,
-                      color: background,
-                      alignment: Alignment.center,
-                      child: Icon(icon, size: 43, color: AppTheme.forest),
-                    );
-                  },
+                  fallbackIcon: fallbackIcon,
                 ),
               ),
+
               Padding(
                 padding: const EdgeInsets.all(12),
+
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
                       style: const TextStyle(
-                        color: AppTheme.forest,
+                        color: HomeScreen.forest,
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
+
                     const SizedBox(height: 7),
+
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        color: AppTheme.muted,
+                        color: HomeScreen.muted,
                         fontSize: 11,
                         height: 1.5,
                       ),
@@ -801,22 +994,28 @@ class FoodAssessmentTile extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(13),
+
           child: SizedBox(
             width: 57,
             height: 59,
+
             child: Image.asset(
               imagePath,
               fit: BoxFit.cover,
+
               errorBuilder: (context, error, stackTrace) {
                 return Container(
-                  color: AppTheme.sage,
-                  child: Icon(fallbackIcon, color: AppTheme.forest, size: 27),
+                  color: HomeScreen.sage,
+
+                  child: Icon(fallbackIcon, color: HomeScreen.forest, size: 27),
                 );
               },
             ),
           ),
         ),
+
         const SizedBox(width: 12),
+
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -825,27 +1024,34 @@ class FoodAssessmentTile extends StatelessWidget {
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+
                 style: const TextStyle(
-                  color: AppTheme.forest,
+                  color: HomeScreen.forest,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                 ),
               ),
+
               const SizedBox(height: 5),
+
               const Text(
                 'Sample assessment',
-                style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                style: TextStyle(color: HomeScreen.muted, fontSize: 11),
               ),
             ],
           ),
         ),
+
         const SizedBox(width: 7),
+
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+
           decoration: BoxDecoration(
             color: statusBackground,
             borderRadius: BorderRadius.circular(30),
           ),
+
           child: Text(
             status,
             style: TextStyle(

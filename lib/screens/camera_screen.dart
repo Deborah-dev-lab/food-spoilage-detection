@@ -25,15 +25,17 @@ class _CameraScreenState extends State<CameraScreen>
 
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
+
   int _cameraIndex = 0;
+  int _cameraRequestId = 0;
 
   bool _isInitializing = false;
   bool _isCapturing = false;
   bool _isPickingGallery = false;
   bool _galleryFirstPending = false;
+  bool _isReviewOpen = false;
 
   String? _cameraError;
-  int _cameraRequestId = 0;
 
   @override
   void initState() {
@@ -53,8 +55,34 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
+  String _friendlyCameraError(CameraException error) {
+    switch (error.code) {
+      case 'CameraAccessDenied':
+        return 'Camera permission was denied. '
+            'Please allow camera access to use the scanner.';
+
+      case 'CameraAccessDeniedWithoutPrompt':
+        return 'Camera access is disabled. '
+            'Enable it in your phone settings.';
+
+      case 'CameraAccessRestricted':
+        return 'Camera access is restricted on this device.';
+
+      case 'NoCamera':
+        return 'No camera is available on this device.';
+
+      default:
+        return 'Camera unavailable: '
+            '${error.description ?? error.code}';
+    }
+  }
+
   Future<void> _initializeCamera() async {
-    if (_isInitializing || _isCapturing || _isPickingGallery) {
+    if (!mounted ||
+        _isInitializing ||
+        _isCapturing ||
+        _isPickingGallery ||
+        _isReviewOpen) {
       return;
     }
 
@@ -111,6 +139,7 @@ class _CameraScreenState extends State<CameraScreen>
       }
 
       final oldController = _controller;
+
       _controller = newController;
       newController = null;
 
@@ -155,28 +184,6 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  String _friendlyCameraError(CameraException error) {
-    switch (error.code) {
-      case 'CameraAccessDenied':
-        return 'Camera permission was denied. '
-            'Please allow camera access to use the scanner.';
-
-      case 'CameraAccessDeniedWithoutPrompt':
-        return 'Camera access is disabled. '
-            'Enable it in your phone settings.';
-
-      case 'CameraAccessRestricted':
-        return 'Camera access is restricted on this device.';
-
-      case 'NoCamera':
-        return 'No camera is available on this device.';
-
-      default:
-        return 'Camera unavailable: '
-            '${error.description ?? error.code}';
-    }
-  }
-
   Future<void> _releaseCamera() async {
     ++_cameraRequestId;
 
@@ -193,7 +200,37 @@ class _CameraScreenState extends State<CameraScreen>
       try {
         await controller.dispose();
       } catch (_) {
-        // Camera may already have been released.
+        // The camera may already have been released.
+      }
+    }
+  }
+
+  Future<void> _openImageReview(String imagePath) async {
+    if (!mounted || _isReviewOpen) return;
+
+    setState(() {
+      _isReviewOpen = true;
+    });
+
+    // The review screen owns the classification flow.
+    // Release the camera while the review screen is visible.
+    await _releaseCamera();
+
+    if (!mounted) return;
+
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ImageReviewScreen(imagePath: imagePath),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isReviewOpen = false;
+        });
+
+        _initializeCamera();
       }
     }
   }
@@ -206,7 +243,8 @@ class _CameraScreenState extends State<CameraScreen>
         controller.value.isTakingPicture ||
         _isCapturing ||
         _isPickingGallery ||
-        _isInitializing) {
+        _isInitializing ||
+        _isReviewOpen) {
       return;
     }
 
@@ -219,12 +257,7 @@ class _CameraScreenState extends State<CameraScreen>
 
       if (!mounted) return;
 
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ImageReviewScreen(imagePath: photo.path),
-        ),
-      );
+      await _openImageReview(photo.path);
     } catch (error) {
       if (!mounted) return;
 
@@ -241,7 +274,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _openGallery() async {
-    if (_isPickingGallery || _isCapturing) {
+    if (!mounted || _isPickingGallery || _isCapturing || _isReviewOpen) {
       return;
     }
 
@@ -259,12 +292,7 @@ class _CameraScreenState extends State<CameraScreen>
       if (!mounted) return;
 
       if (photo != null) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ImageReviewScreen(imagePath: photo.path),
-          ),
-        );
+        await _openImageReview(photo.path);
       }
     } catch (error) {
       if (!mounted) return;
@@ -279,7 +307,7 @@ class _CameraScreenState extends State<CameraScreen>
           _galleryFirstPending = false;
         });
 
-        if (_controller == null && !_isInitializing && _cameraError == null) {
+        if (_controller == null && !_isInitializing && !_isReviewOpen) {
           _initializeCamera();
         }
       }
@@ -290,7 +318,8 @@ class _CameraScreenState extends State<CameraScreen>
     if (_cameras.length < 2 ||
         _isInitializing ||
         _isCapturing ||
-        _isPickingGallery) {
+        _isPickingGallery ||
+        _isReviewOpen) {
       return;
     }
 
@@ -315,7 +344,7 @@ class _CameraScreenState extends State<CameraScreen>
           _controller == null &&
           !_isPickingGallery &&
           !_isCapturing &&
-          _cameraError == null) {
+          !_isReviewOpen) {
         _initializeCamera();
       }
     }
@@ -329,6 +358,7 @@ class _CameraScreenState extends State<CameraScreen>
 
     final controller = _controller;
     _controller = null;
+
     controller?.dispose();
 
     super.dispose();
@@ -336,6 +366,14 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   Widget build(BuildContext context) {
+    final canCapture =
+        _controller != null &&
+        _controller!.value.isInitialized &&
+        !_isCapturing &&
+        !_isInitializing &&
+        !_isPickingGallery &&
+        !_isReviewOpen;
+
     return Scaffold(
       backgroundColor: forest,
       appBar: AppBar(
@@ -375,9 +413,7 @@ class _CameraScreenState extends State<CameraScreen>
                 letterSpacing: 1.8,
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               "Let's take a\ncloser look.",
               style: TextStyle(
@@ -388,44 +424,36 @@ class _CameraScreenState extends State<CameraScreen>
                 letterSpacing: -1,
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               'Position one fruit or vegetable clearly '
               'inside the camera frame.',
               style: TextStyle(color: sage, fontSize: 13, height: 1.5),
             ),
-
             const SizedBox(height: 22),
 
-            // LIVE CAMERA
             _buildCameraCard(),
 
             const SizedBox(height: 18),
 
-            // CAMERA CONTROLS
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _CameraAction(
                   icon: Icons.photo_library_outlined,
                   label: 'Gallery',
-                  onTap: _isCapturing || _isPickingGallery
+                  onTap: _isCapturing || _isPickingGallery || _isReviewOpen
                       ? null
                       : _openGallery,
                 ),
-
                 GestureDetector(
-                  onTap: _isCapturing || _isInitializing || _isPickingGallery
-                      ? null
-                      : _capturePhoto,
+                  onTap: canCapture ? _capturePhoto : null,
                   child: Container(
                     width: 78,
                     height: 78,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: lime,
+                      color: canCapture ? lime : const Color(0xFF8EA88A),
                       border: Border.all(color: Colors.white, width: 4),
                     ),
                     child: _isCapturing
@@ -443,7 +471,6 @@ class _CameraScreenState extends State<CameraScreen>
                           ),
                   ),
                 ),
-
                 _CameraAction(
                   icon: Icons.cameraswitch_outlined,
                   label: 'Flip',
@@ -451,15 +478,14 @@ class _CameraScreenState extends State<CameraScreen>
                       _cameras.length > 1 &&
                           !_isCapturing &&
                           !_isInitializing &&
-                          !_isPickingGallery
+                          !_isPickingGallery &&
+                          !_isReviewOpen
                       ? _switchCamera
                       : null,
                 ),
               ],
             ),
-
             const SizedBox(height: 13),
-
             const Center(
               child: Text(
                 'Tap the camera button to capture your photo',
@@ -467,10 +493,7 @@ class _CameraScreenState extends State<CameraScreen>
                 style: TextStyle(color: sage, fontSize: 12),
               ),
             ),
-
             const SizedBox(height: 25),
-
-            // PHOTO TIPS
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -498,19 +521,15 @@ class _CameraScreenState extends State<CameraScreen>
                       ),
                     ],
                   ),
-
                   SizedBox(height: 16),
-
                   _TipRow(
                     icon: Icons.wb_sunny_outlined,
                     text: 'Use good, natural lighting',
                   ),
-
                   _TipRow(
                     icon: Icons.center_focus_strong_rounded,
                     text: 'Keep your produce in focus',
                   ),
-
                   _TipRow(
                     icon: Icons.filter_center_focus_rounded,
                     text: 'Capture one item at a time',
@@ -535,15 +554,12 @@ class _CameraScreenState extends State<CameraScreen>
           fit: StackFit.expand,
           children: [
             _buildCameraContent(),
-
-            // FOCUS FRAME OVERLAY
             IgnorePointer(
               child: Padding(
                 padding: const EdgeInsets.all(28),
                 child: CustomPaint(painter: _CameraFramePainter()),
               ),
             ),
-
             Positioned(
               top: 15,
               left: 15,
@@ -609,22 +625,15 @@ class _CameraScreenState extends State<CameraScreen>
       return const Center(child: CircularProgressIndicator(color: lime));
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final previewWidth = previewSize.height;
-        final previewHeight = previewSize.width;
-
-        return ClipRect(
-          child: FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: previewWidth,
-              height: previewHeight,
-              child: CameraPreview(controller),
-            ),
-          ),
-        );
-      },
+    return ClipRect(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: previewSize.height,
+          height: previewSize.width,
+          child: CameraPreview(controller),
+        ),
+      ),
     );
   }
 }
@@ -658,9 +667,7 @@ class _CameraAction extends StatelessWidget {
                   : const Color(0xFF758076),
               size: 27,
             ),
-
             const SizedBox(height: 6),
-
             Text(
               label,
               style: TextStyle(
@@ -691,9 +698,7 @@ class _TipRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, color: const Color(0xFFC6F0A5), size: 19),
-
           const SizedBox(width: 12),
-
           Expanded(
             child: Text(
               text,
@@ -732,9 +737,7 @@ class _CameraPlaceholder extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: const Color(0xFFC6F0A5), size: 45),
-
             const SizedBox(height: 15),
-
             Text(
               message,
               textAlign: TextAlign.center,
@@ -744,9 +747,7 @@ class _CameraPlaceholder extends StatelessWidget {
                 height: 1.5,
               ),
             ),
-
             const SizedBox(height: 15),
-
             TextButton(
               onPressed: onAction,
               child: Text(
@@ -777,22 +778,18 @@ class _CameraFramePainter extends CustomPainter {
     const radius = 18.0;
 
     final path = Path()
-      // TOP LEFT
       ..moveTo(0, corner)
       ..lineTo(0, radius)
       ..quadraticBezierTo(0, 0, radius, 0)
       ..lineTo(corner, 0)
-      // TOP RIGHT
       ..moveTo(size.width - corner, 0)
       ..lineTo(size.width - radius, 0)
       ..quadraticBezierTo(size.width, 0, size.width, radius)
       ..lineTo(size.width, corner)
-      // BOTTOM LEFT
       ..moveTo(0, size.height - corner)
       ..lineTo(0, size.height - radius)
       ..quadraticBezierTo(0, size.height, radius, size.height)
       ..lineTo(corner, size.height)
-      // BOTTOM RIGHT
       ..moveTo(size.width - corner, size.height)
       ..lineTo(size.width - radius, size.height)
       ..quadraticBezierTo(
