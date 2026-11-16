@@ -6,14 +6,10 @@ Fresh_Banana
 Rotten_Banana
 Fresh_BellPepper
 Rotten_BellPepper
-Fresh_Carrot
-Rotten_Carrot
 Fresh_Cucumber
 Rotten_Cucumber
 Fresh_Lemon
 Rotten_Lemon
-Fresh_Mango
-Rotten_Mango
 Fresh_Orange
 Rotten_Orange
 Fresh_Papaya
@@ -22,9 +18,6 @@ Fresh_Peach
 Rotten_Peach
 Fresh_Persimmon
 Rotten_Persimmon
-Fresh_Potato
-Rotten_Potato
-Fresh_Strawberry
 Rotten_Strawberry
 Fresh_Tomato
 Rotten_Tomato

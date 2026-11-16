@@ -27,8 +27,8 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
   static const Color muted = AppTheme.muted;
   static const Color border = AppTheme.border;
 
-  // Provisional confidence threshold.
-  // This is not a validated non-produce detection threshold.
+  // Used only for uncertain freshness classifications.
+  // Non-produce detection is handled by the binary model.
   static const double uncertainThreshold = 0.65;
 
   final ImagePicker _picker = ImagePicker();
@@ -52,6 +52,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     _cnnService.dispose();
     super.dispose();
   }
+
+  // ============================================================
+  // CHANGE PHOTO
+  // ============================================================
 
   Future<void> _changePhoto(ImageSource source) async {
     if (_isPickingImage || _isAnalysing) return;
@@ -93,6 +97,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     }
   }
 
+  // ============================================================
+  // NO PRODUCE DETECTED SCREEN
+  // ============================================================
+
   Future<void> _showNoProduceScreen({
     required String imagePath,
     required bool isUncertain,
@@ -107,15 +115,16 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
           onRetry: () {
             if (!mounted) return;
 
-            // Close the result screen and return to
-            // this review screen, where the user can
-            // retake or select another photograph.
             Navigator.of(context).pop();
           },
         ),
       ),
     );
   }
+
+  // ============================================================
+  // CNN V4 IMAGE ANALYSIS
+  // ============================================================
 
   Future<void> _analyseImage() async {
     if (_isAnalysing || _isPickingImage) return;
@@ -142,9 +151,39 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
         throw const FormatException('The selected image is empty.');
       }
 
+      // --------------------------------------------------------
+      // STAGE 1: RUN BINARY PRODUCE DETECTOR
+      // STAGE 2: RUN CNN V4 ONLY WHEN PRODUCE IS DETECTED
+      //
+      // Both stages are handled by CnnInferenceService.
+      // --------------------------------------------------------
+
       final prediction = await _cnnService.predict(imageBytes);
 
       if (!mounted) return;
+
+      // --------------------------------------------------------
+      // CASE 1: NO FRUIT OR VEGETABLE DETECTED
+      // --------------------------------------------------------
+
+      if (!prediction.isProduce) {
+        debugPrint(
+          'FreshTrack: No produce detected. '
+          'Produce probability: '
+          '${(prediction.produceScore * 100).toStringAsFixed(2)}%',
+        );
+
+        await _showNoProduceScreen(
+          imagePath: analysedImagePath,
+          isUncertain: false,
+        );
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // CASE 2: VALIDATE CNN V4 PREDICTION
+      // --------------------------------------------------------
 
       final label = prediction.label.trim();
       final confidence = prediction.confidence;
@@ -153,61 +192,94 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
           !confidence.isFinite ||
           confidence < 0 ||
           confidence > 1) {
-        await _showNoProduceScreen(
-          imagePath: analysedImagePath,
-          isUncertain: true,
+        throw StateError('CNN V4 returned an invalid prediction.');
+      }
+
+      debugPrint(
+        'FreshTrack CNN V4: $label '
+        '(${(confidence * 100).toStringAsFixed(2)}%)',
+      );
+
+      // --------------------------------------------------------
+      // CASE 3: UNCERTAIN FRESHNESS CLASSIFICATION
+      // --------------------------------------------------------
+
+      if (confidence < uncertainThreshold) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => UncertainResultScreen(
+              imagePath: analysedImagePath,
+              produceName: label.replaceAll('_', ' '),
+              confidence: confidence,
+              isDemo: false,
+            ),
+          ),
         );
+
         return;
       }
 
-      // A low-confidence prediction is inconclusive.
-      // It does not establish that no produce is present.
-      if (confidence < uncertainThreshold) {
-        await _showNoProduceScreen(
-          imagePath: analysedImagePath,
-          isUncertain: true,
-        );
-        return;
-      }
+      // --------------------------------------------------------
+      // CASE 4: DETERMINE FRESH OR ROTTEN
+      // --------------------------------------------------------
 
       final normalizedLabel = label.toLowerCase();
 
-      // This mapping follows the naming convention in
-      // your existing implementation. It should be checked
-      // against the actual labels.txt file.
       final isSpoiled =
-          normalizedLabel.contains('rotten') ||
-          normalizedLabel.contains('spoiled') ||
-          normalizedLabel.contains('bad');
+          normalizedLabel.startsWith('rotten_') ||
+          normalizedLabel.startsWith('spoiled_');
+
+      final isFresh = normalizedLabel.startsWith('fresh_');
+
+      if (!isSpoiled && !isFresh) {
+        throw StateError('Unknown freshness label: $label');
+      }
+
+      // Convert "Fresh_Apple" to "Apple".
+      // Convert "Rotten_Banana" to "Banana".
+
+      final produceName = label
+          .replaceFirst(RegExp(r'^(Fresh|Rotten|Spoiled)_'), '')
+          .replaceAll('_', ' ');
+
+      // --------------------------------------------------------
+      // CASE 5: ROTTEN PRODUCE
+      // --------------------------------------------------------
 
       if (isSpoiled) {
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => SpoilageAlertScreen(
               imagePath: analysedImagePath,
-              produceName: label,
+              produceName: produceName,
               confidence: confidence,
               isDemo: false,
             ),
           ),
         );
-      } else {
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => AssessmentResultScreen(
-              imagePath: analysedImagePath,
-              result: AssessmentResult(
-                produceName: label,
-                status: FreshnessStatus.fresh,
-                confidence: confidence,
-                isDemo: false,
-              ),
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // CASE 6: FRESH PRODUCE
+      // --------------------------------------------------------
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AssessmentResultScreen(
+            imagePath: analysedImagePath,
+            result: AssessmentResult(
+              produceName: produceName,
+              status: FreshnessStatus.fresh,
+              confidence: confidence,
+              isDemo: false,
             ),
           ),
-        );
-      }
+        ),
+      );
     } catch (error) {
-      debugPrint('CNN analysis error: $error');
+      debugPrint('FreshTrack CNN V4 analysis error: $error');
 
       if (!mounted) return;
 
@@ -224,6 +296,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       }
     }
   }
+
+  // ============================================================
+  // DEMO RESULT SCREENS
+  // ============================================================
 
   Future<void> _showDemoOptions() async {
     if (_isAnalysing || _isPickingImage) return;
@@ -254,7 +330,9 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 20),
+
                 const Text(
                   'Demo result screens',
                   style: TextStyle(
@@ -263,14 +341,18 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+
                 const SizedBox(height: 8),
+
                 const Text(
                   'These are simulated results for '
                   'interface testing only. They do not '
                   'represent a real CNN assessment.',
                   style: TextStyle(color: muted, fontSize: 12, height: 1.5),
                 ),
+
                 const SizedBox(height: 18),
+
                 ListTile(
                   leading: const Icon(
                     Icons.check_circle_outline,
@@ -295,6 +377,7 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                     );
                   },
                 ),
+
                 ListTile(
                   leading: const Icon(
                     Icons.warning_amber_rounded,
@@ -316,6 +399,7 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                     );
                   },
                 ),
+
                 ListTile(
                   leading: const Icon(Icons.help_outline, color: Colors.orange),
                   title: const Text('Uncertain result'),
@@ -334,15 +418,14 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                     );
                   },
                 ),
+
                 ListTile(
                   leading: const Icon(
                     Icons.image_search_outlined,
                     color: forest,
                   ),
                   title: const Text('No produce / inconclusive screen'),
-                  subtitle: const Text(
-                    'Preview the new assessment-unavailable UI',
-                  ),
+                  subtitle: const Text('Preview the assessment-unavailable UI'),
                   onTap: () {
                     Navigator.pop(sheetContext);
 
@@ -359,6 +442,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       },
     );
   }
+
+  // ============================================================
+  // PHOTO PREVIEW
+  // ============================================================
 
   Widget _buildPhotoPreview() {
     return Container(
@@ -395,6 +482,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     );
   }
 
+  // ============================================================
+  // PHOTO ACTIONS
+  // ============================================================
+
   Widget _buildPhotoActions() {
     return Row(
       children: [
@@ -415,7 +506,9 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
             ),
           ),
         ),
+
         const SizedBox(width: 12),
+
         Expanded(
           child: OutlinedButton.icon(
             onPressed: _isAnalysing || _isPickingImage
@@ -437,6 +530,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     );
   }
 
+  // ============================================================
+  // PHOTO QUALITY CHECKLIST
+  // ============================================================
+
   Widget _buildChecklist() {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -456,12 +553,16 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
               fontWeight: FontWeight.w800,
             ),
           ),
+
           SizedBox(height: 14),
+
           _ChecklistItem(icon: Icons.wb_sunny_outlined, text: 'Good lighting'),
+
           _ChecklistItem(
             icon: Icons.center_focus_strong_rounded,
             text: 'Clear focus',
           ),
+
           _ChecklistItem(
             icon: Icons.crop_free_rounded,
             text: 'One main item in the image',
@@ -470,6 +571,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       ),
     );
   }
+
+  // ============================================================
+  // ERROR MESSAGE
+  // ============================================================
 
   Widget _buildErrorMessage() {
     if (_errorMessage == null) {
@@ -491,7 +596,9 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
             color: Color(0xFFA34439),
             size: 20,
           ),
+
           const SizedBox(width: 10),
+
           Expanded(
             child: Text(
               _errorMessage!,
@@ -506,6 +613,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
       ),
     );
   }
+
+  // ============================================================
+  // ANALYSE BUTTON
+  // ============================================================
 
   Widget _buildAnalyseButton() {
     return SizedBox(
@@ -539,6 +650,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     );
   }
 
+  // ============================================================
+  // MAIN SCREEN
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -570,7 +685,9 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 letterSpacing: 1.5,
               ),
             ),
+
             const SizedBox(height: 10),
+
             const Text(
               'Looking good?',
               style: TextStyle(
@@ -579,25 +696,38 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 fontWeight: FontWeight.w800,
               ),
             ),
+
             const SizedBox(height: 8),
+
             const Text(
               'Make sure your produce is clearly visible '
               'before continuing.',
               style: TextStyle(color: muted, fontSize: 13, height: 1.5),
             ),
+
             const SizedBox(height: 22),
+
             _buildPhotoPreview(),
+
             const SizedBox(height: 15),
+
             _buildPhotoActions(),
+
             const SizedBox(height: 24),
+
             _buildChecklist(),
+
             if (_errorMessage != null) ...[
               const SizedBox(height: 18),
               _buildErrorMessage(),
             ],
+
             const SizedBox(height: 24),
+
             _buildAnalyseButton(),
+
             const SizedBox(height: 15),
+
             TextButton(
               onPressed: _isAnalysing || _isPickingImage
                   ? null
@@ -611,7 +741,9 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
                 ),
               ),
             ),
+
             const SizedBox(height: 10),
+
             const Text(
               'AI predictions are based on visible appearance '
               'and do not guarantee food safety.',
@@ -624,6 +756,10 @@ class _ImageReviewScreenState extends State<ImageReviewScreen> {
     );
   }
 }
+
+// ============================================================
+// CHECKLIST ITEM
+// ============================================================
 
 class _ChecklistItem extends StatelessWidget {
   final IconData icon;
@@ -638,7 +774,9 @@ class _ChecklistItem extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, color: AppTheme.forest, size: 20),
+
           const SizedBox(width: 12),
+
           Expanded(
             child: Text(
               text,

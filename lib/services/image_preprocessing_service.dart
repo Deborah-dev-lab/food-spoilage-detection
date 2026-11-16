@@ -5,11 +5,19 @@ import 'package:image/image.dart' as img;
 class ImagePreprocessingService {
   static const int inputSize = 160;
 
-  /// Prepares an image for FreshTrack CNN V3.
+  /// Prepares an image for FreshTrack V4.
   ///
-  /// Input: Image bytes (JPEG or PNG)
+  /// Used by:
+  /// 1. Binary produce detector
+  /// 2. CNN V4 freshness classifier
+  ///
+  /// Input: JPEG or PNG image bytes
   /// Output shape: [1, 160, 160, 3]
-  /// Pixel range: 0-255
+  /// Pixel values: RGB float32-compatible, 0-255
+  ///
+  /// Both models perform MobileNetV2 normalization
+  /// internally. Do not normalize here.
+
   static List<List<List<List<double>>>> preprocess(Uint8List imageBytes) {
     // Step 1: Decode the image.
     final decodedImage = img.decodeImage(imageBytes);
@@ -21,7 +29,7 @@ class ImagePreprocessingService {
     // Step 2: Correct image orientation.
     final orientedImage = img.bakeOrientation(decodedImage);
 
-    // Step 3: Resize to CNN V3 input dimensions.
+    // Step 3: Resize to 160 x 160.
     final resizedImage = img.copyResize(
       orientedImage,
       width: inputSize,
@@ -29,7 +37,7 @@ class ImagePreprocessingService {
       interpolation: img.Interpolation.linear,
     );
 
-    // Step 4: Convert pixels into an RGB tensor.
+    // Step 4: Convert to RGB tensor.
     final inputTensor = List.generate(
       1,
       (_) => List.generate(

@@ -2,12 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../database/database_helper.dart';
 import '../services/assessment_storage.dart';
 import '../theme/app_theme.dart';
+import 'feedback_screen.dart';
 
-// =====================================================
-// FRESHTRACK - SQLITE ASSESSMENT HISTORY
-// =====================================================
+// ============================================================
+// FRESHTRACK — ASSESSMENT HISTORY WITH SQLITE FEEDBACK
+// ============================================================
 
 class HistoryRecord {
   final int id;
@@ -27,7 +29,6 @@ class HistoryRecord {
   });
 
   factory HistoryRecord.fromDatabase(Map<String, dynamic> row) {
-    final rawDate = row['assessed_at']?.toString() ?? '';
     final rawConfidence = row['confidence'];
 
     return HistoryRecord(
@@ -35,7 +36,7 @@ class HistoryRecord {
       name: row['produce_name']?.toString() ?? 'Unknown produce',
       status: row['freshness_status']?.toString() ?? 'uncertain',
       assessedAt:
-          DateTime.tryParse(rawDate)?.toLocal() ??
+          DateTime.tryParse(row['assessed_at']?.toString() ?? '')?.toLocal() ??
           DateTime.fromMillisecondsSinceEpoch(0),
       imagePath: row['image_path']?.toString() ?? '',
       confidence: rawConfidence is num
@@ -75,6 +76,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     super.dispose();
   }
 
+  // ============================================================
+  // SQLITE ASSESSMENT OPERATIONS
+  // ============================================================
+
   Future<void> _loadAssessments() async {
     if (!mounted) return;
 
@@ -100,12 +105,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       });
 
       debugPrint(
-        'FRESHTRACK: Loaded ${records.length} '
-        'assessments from SQLite',
+        'FRESHTRACK: Loaded ${records.length} assessments from SQLite',
       );
-    } catch (error, stackTrace) {
+    } catch (error) {
       debugPrint('FRESHTRACK: History load failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
 
       if (!mounted) return;
 
@@ -116,10 +119,61 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  String _normaliseStatus(String status) {
-    final value = status.trim().toLowerCase();
+  Future<void> _deleteRecord(HistoryRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete assessment?'),
+          content: Text(
+            'Remove the saved assessment for ${record.name}? '
+            'Any linked feedback will also be deleted. '
+            'This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Color(0xFFA34439)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
 
-    switch (value) {
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await AssessmentStorage.deleteAssessment(record.id, record.imagePath);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Assessment deleted successfully')),
+      );
+
+      await _loadAssessments();
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete assessment: $error')),
+      );
+    }
+  }
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  String _normaliseStatus(String status) {
+    switch (status.trim().toLowerCase()) {
       case 'fresh':
         return 'Fresh';
       case 'spoiling':
@@ -131,7 +185,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       case 'unknown':
         return 'Uncertain';
       default:
-        return status.isEmpty ? 'Uncertain' : status;
+        return status.trim().isEmpty ? 'Uncertain' : status;
     }
   }
 
@@ -221,18 +275,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
 
     final value = confidence.clamp(0.0, 1.0);
+
     return '${(value * 100).toStringAsFixed(1)}%';
   }
 
-  Widget _buildImage(String imagePath, {double? width, double? height}) {
+  Widget _buildImage(String imagePath) {
     if (imagePath.isEmpty) {
       return _imageFallback();
     }
 
     return Image.file(
       File(imagePath),
-      width: width,
-      height: height,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) {
         return _imageFallback();
@@ -252,56 +305,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Future<void> _deleteRecord(HistoryRecord record) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete assessment?'),
-          content: Text(
-            'Remove the saved assessment for ${record.name}? '
-            'This action cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text(
-                'Delete',
-                style: TextStyle(color: Color(0xFFA34439)),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+  // ============================================================
+  // ASSESSMENT DETAILS BOTTOM SHEET
+  // ============================================================
 
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await AssessmentStorage.deleteAssessment(record.id, record.imagePath);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Assessment deleted successfully')),
-      );
-
-      await _loadAssessments();
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete assessment: $error')),
-      );
-    }
-  }
-
-  void _showRecordDetails(HistoryRecord record) {
-    showModalBottomSheet<void>(
+  Future<void> _showRecordDetails(HistoryRecord record) async {
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.ivory,
@@ -313,7 +322,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
         return SafeArea(
           child: FractionallySizedBox(
-            heightFactor: 0.78,
+            heightFactor: 0.82,
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(22, 20, 22, 30),
               child: Column(
@@ -329,7 +338,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 22),
+
                   Row(
                     children: [
                       Expanded(
@@ -348,7 +359,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 6),
+
                   const Text(
                     'SAVED CNN ASSESSMENT',
                     style: TextStyle(
@@ -358,7 +371,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       color: AppTheme.muted,
                     ),
                   ),
+
                   const SizedBox(height: 18),
+
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: SizedBox(
@@ -367,7 +382,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: _buildImage(record.imagePath),
                     ),
                   ),
+
                   const SizedBox(height: 18),
+
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
@@ -406,25 +423,33 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ],
                     ),
                   ),
+
                   const SizedBox(height: 18),
+
                   _DetailRow(
                     icon: Icons.calendar_today_outlined,
                     label: 'Date',
                     value: _formatDate(record.assessedAt),
                   ),
+
                   const SizedBox(height: 12),
+
                   _DetailRow(
                     icon: Icons.access_time_rounded,
                     label: 'Time',
                     value: _formatTime(record.assessedAt),
                   ),
+
                   const SizedBox(height: 12),
+
                   _DetailRow(
                     icon: Icons.tag_outlined,
                     label: 'Record ID',
                     value: '${record.id}',
                   ),
+
                   const SizedBox(height: 20),
+
                   const Text(
                     'FreshTrack uses image classification to '
                     'estimate visual freshness. The result is '
@@ -435,7 +460,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       color: AppTheme.muted,
                     ),
                   ),
+
                   const SizedBox(height: 24),
+
+                  // NEW: FEEDBACK SECTION
+                  _AssessmentFeedbackSection(record: record),
+
+                  const SizedBox(height: 24),
+
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -448,7 +480,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       label: const Text('Delete assessment'),
                     ),
                   ),
+
                   const SizedBox(height: 10),
+
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -464,7 +498,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
         );
       },
     );
+
+    if (mounted) {
+      await _loadAssessments();
+    }
   }
+
+  // ============================================================
+  // EMPTY STATE
+  // ============================================================
 
   Widget _buildEmptyState() {
     final hasSearch =
@@ -513,6 +555,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  // ============================================================
+  // MAIN HISTORY SCREEN
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     final records = _filteredRecords;
@@ -555,7 +601,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   letterSpacing: 1.5,
                 ),
               ),
+
               const SizedBox(height: 9),
+
               const Text(
                 'Every check,\nin one place.',
                 style: TextStyle(
@@ -566,7 +614,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   color: AppTheme.forest,
                 ),
               ),
+
               const SizedBox(height: 12),
+
               const Text(
                 'Explore your saved assessments '
                 'and revisit previous CNN results.',
@@ -576,11 +626,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   color: AppTheme.muted,
                 ),
               ),
+
               const SizedBox(height: 23),
 
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
+
                   final cardWidth = width >= 330
                       ? (width - 20) / 3
                       : (width - 10) / 2;
@@ -798,9 +850,317 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-// =====================================================
+// ============================================================
+// NEW — SQLITE FEEDBACK SECTION
+// ============================================================
+
+class _AssessmentFeedbackSection extends StatefulWidget {
+  final HistoryRecord record;
+
+  const _AssessmentFeedbackSection({required this.record});
+
+  @override
+  State<_AssessmentFeedbackSection> createState() =>
+      _AssessmentFeedbackSectionState();
+}
+
+class _AssessmentFeedbackSectionState
+    extends State<_AssessmentFeedbackSection> {
+  Map<String, dynamic>? _feedback;
+
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeedback();
+  }
+
+  Future<void> _loadFeedback() async {
+    if (!mounted) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final rows = await DatabaseHelper.instance.getFeedbackForAssessment(
+        widget.record.id,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _feedback = rows.isEmpty ? null : rows.first;
+        _loading = false;
+      });
+    } catch (error) {
+      debugPrint('FRESHTRACK: Feedback load failed: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _error = 'Could not load feedback.';
+      });
+    }
+  }
+
+  String _accuracyLabel(String? value) {
+    switch (value) {
+      case 'correct':
+        return 'Correct';
+      case 'partially_correct':
+        return 'Partially correct';
+      case 'incorrect':
+        return 'Incorrect';
+      default:
+        return 'Not recorded';
+    }
+  }
+
+  String _helpfulnessLabel(dynamic value) {
+    if (value == 1) return 'Yes';
+    if (value == 0) return 'No';
+
+    return 'Not recorded';
+  }
+
+  String _dateLabel(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+
+    if (date == null) {
+      return 'Not recorded';
+    }
+
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+
+    return '${date.day}/${date.month}/${date.year} '
+        '$hour:$minute $period';
+  }
+
+  Future<void> _openFeedback() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FeedbackScreen(
+          assessmentId: widget.record.id,
+          produceName: widget.record.name,
+          assessmentStatus: widget.record.status,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      await _loadFeedback();
+    }
+  }
+
+  Widget _buildFeedbackDetails() {
+    final feedback = _feedback!;
+
+    final actualProduce = feedback['actual_produce']?.toString().trim() ?? '';
+
+    final actualCondition =
+        feedback['actual_condition']?.toString().trim() ?? '';
+
+    final comments = feedback['comments']?.toString().trim() ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(
+              Icons.check_circle_outline_rounded,
+              color: Color(0xFF28764A),
+              size: 20,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Feedback submitted',
+                style: TextStyle(
+                  color: AppTheme.forest,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        _FeedbackValue(
+          label: 'Prediction accuracy',
+          value: _accuracyLabel(feedback['prediction_accuracy']?.toString()),
+        ),
+
+        _FeedbackValue(
+          label: 'Was the assessment helpful?',
+          value: _helpfulnessLabel(feedback['is_helpful']),
+        ),
+
+        if (actualProduce.isNotEmpty)
+          _FeedbackValue(label: 'Actual produce', value: actualProduce),
+
+        if (actualCondition.isNotEmpty)
+          _FeedbackValue(
+            label: 'Actual freshness condition',
+            value: actualCondition,
+          ),
+
+        if (comments.isNotEmpty)
+          _FeedbackValue(label: 'Additional comments', value: comments),
+
+        _FeedbackValue(
+          label: 'Submitted on',
+          value: _dateLabel(feedback['submitted_at']),
+        ),
+
+        const SizedBox(height: 5),
+
+        const Text(
+          'Your feedback is saved locally on this device.',
+          style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.5),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.rate_review_outlined,
+                color: AppTheme.forest,
+                size: 23,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Assessment feedback',
+                  style: TextStyle(
+                    color: AppTheme.forest,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          if (_loading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(color: AppTheme.forest),
+              ),
+            )
+          else if (_error != null) ...[
+            Text(
+              _error!,
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _loadFeedback, child: const Text('Retry')),
+          ] else if (_feedback == null) ...[
+            const Text(
+              'You have not submitted feedback for this assessment.',
+              style: TextStyle(
+                color: AppTheme.muted,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _openFeedback,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.forest,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text(
+                  'Give feedback',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ] else
+            _buildFeedbackDetails(),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// FEEDBACK DETAIL ROW
+// ============================================================
+
+class _FeedbackValue extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _FeedbackValue({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppTheme.forest,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
 // SUMMARY CARD
-// =====================================================
+// ============================================================
 
 class _SummaryCard extends StatelessWidget {
   final double width;
@@ -860,9 +1220,9 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-// =====================================================
+// ============================================================
 // HISTORY TILE
-// =====================================================
+// ============================================================
 
 class _HistoryTile extends StatelessWidget {
   final HistoryRecord record;
@@ -907,7 +1267,9 @@ class _HistoryTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(13),
                 child: SizedBox(width: 55, height: 64, child: image),
               ),
+
               const SizedBox(width: 10),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -951,7 +1313,9 @@ class _HistoryTile extends StatelessWidget {
                   ],
                 ),
               ),
+
               const SizedBox(width: 6),
+
               SizedBox(
                 width: 76,
                 child: Column(
@@ -994,9 +1358,9 @@ class _HistoryTile extends StatelessWidget {
   }
 }
 
-// =====================================================
-// DETAIL ROW
-// =====================================================
+// ============================================================
+// ASSESSMENT DETAIL ROW
+// ============================================================
 
 class _DetailRow extends StatelessWidget {
   final IconData icon;
